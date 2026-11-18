@@ -15,6 +15,12 @@ import { requireAuth } from '../auth/session.js';
 import { HttpError } from '../lib/http-error.js';
 import { listProviderModels } from '../llm/provider.js';
 
+// 手机上从聊天/备忘录复制 key，很容易带上换行、全角空格、零宽字符；
+// 这些会让上游报 401 invalid api key，落库前统一洗掉。
+function cleanKey(value: string): string {
+  return value.replace(/[\s\u00a0\u200b-\u200d\ufeff]/g, '');
+}
+
 const providerRoutes: FastifyPluginAsync = async (app) => {
   app.addHook('preHandler', requireAuth);
 
@@ -24,7 +30,7 @@ const providerRoutes: FastifyPluginAsync = async (app) => {
 
   app.post('/', async (req, reply) => {
     const input = providerInputSchema.parse(req.body);
-    const provider = createProvider(input);
+    const provider = createProvider({ ...input, apiKey: cleanKey(input.apiKey) });
     return reply.code(201).send({ provider });
   });
 
@@ -32,7 +38,7 @@ const providerRoutes: FastifyPluginAsync = async (app) => {
   // apiKey 为空但传了 providerId 时，退回用库里已加密保存的 Key
   app.post('/models', async (req) => {
     const input = providerModelsInputSchema.parse(req.body);
-    let apiKey = input.apiKey ?? '';
+    let apiKey = cleanKey(input.apiKey ?? '');
     if (!apiKey && input.providerId) {
       const stored = getProviderConfig(input.providerId);
       if (!stored) throw new HttpError(404, '模型服务不存在');
@@ -50,7 +56,9 @@ const providerRoutes: FastifyPluginAsync = async (app) => {
   app.patch('/:id', async (req) => {
     const { id } = req.params as { id: string };
     const patch = providerPatchSchema.parse(req.body);
-    const provider = updateProvider(id, patch);
+    const next =
+      patch.apiKey === undefined ? patch : { ...patch, apiKey: cleanKey(patch.apiKey) };
+    const provider = updateProvider(id, next);
     if (!provider) throw new HttpError(404, '模型服务不存在');
     return { provider };
   });

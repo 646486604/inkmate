@@ -70,6 +70,10 @@ export function ProviderForm({ provider, onCancel, onSaved }: ProviderFormProps)
 
   const modelListId = `provider-models-${provider?.id ?? 'new'}`;
 
+  // 从手机剪贴板粘过来的 key 常带换行/全角空格/零宽字符，上游会直接判 401
+  const cleanKey = apiKey.replace(/[\s\u00a0\u200b-\u200d\ufeff]/g, '');
+  const keyJunk = apiKey.length - cleanKey.length;
+
   function applyPreset(preset: Preset) {
     if (!name.trim()) setName(preset.name);
     setKind(preset.kind);
@@ -96,7 +100,7 @@ export function ProviderForm({ provider, onCancel, onSaved }: ProviderFormProps)
       const result = await api.listProviderModels({
         kind,
         baseUrl: trimmedBase,
-        apiKey: apiKey.trim(),
+        apiKey: cleanKey,
         providerId: provider?.id,
       });
       setModels(result.models);
@@ -129,7 +133,7 @@ export function ProviderForm({ provider, onCancel, onSaved }: ProviderFormProps)
       let saved: ProviderPublic;
       if (provider) {
         const patch: ProviderPatch = { name, kind, baseUrl, model };
-        if (apiKey.trim()) patch.apiKey = apiKey.trim();
+        if (cleanKey) patch.apiKey = cleanKey;
         saved = (await api.updateProvider(provider.id, patch)).provider;
       } else {
         const input: ProviderInput = {
@@ -137,7 +141,7 @@ export function ProviderForm({ provider, onCancel, onSaved }: ProviderFormProps)
           kind,
           baseUrl,
           model,
-          apiKey: apiKey.trim(),
+          apiKey: cleanKey,
           enabled: true,
         };
         saved = (await api.createProvider(input)).provider;
@@ -323,6 +327,14 @@ export function ProviderForm({ provider, onCancel, onSaved }: ProviderFormProps)
             autoComplete="new-password"
             spellCheck={false}
           />
+          {cleanKey ? (
+            <span className="mt-1.5 block text-[10px] leading-relaxed text-[var(--faint)]">
+              长度 {cleanKey.length}，结尾 ****{cleanKey.slice(-4)}
+              {keyJunk > 0 ? `（已自动去掉 ${keyJunk} 个空白/隐藏字符）` : ''}
+              <br />
+              上游报 key 无效时，先对一下这串结尾和平台上的 key 是否一致
+            </span>
+          ) : null}
         </label>
       </div>
 

@@ -121,7 +121,17 @@ export async function listProviderModels(config: ProviderConfig): Promise<string
   }
 
   if (!res.ok) {
-    throw new HttpError(400, `拉取模型失败（${res.status}）：${await readError(res, config.apiKey)}`);
+    const detail = await readErrorDetail(res, config.apiKey);
+    if (res.status === 401 || res.status === 403) {
+      throw new HttpError(
+        400,
+        `API Key 被上游拒绝（${res.status}）：${detail}\n检查 key 是否复制完整、是不是这个平台的 key、有没有被删除或重置`,
+      );
+    }
+    if (res.status === 402) {
+      throw new HttpError(400, `上游余额不足（402）：${detail}`);
+    }
+    throw new HttpError(400, `拉取模型失败（${res.status}）：${detail}`);
   }
 
   const data = (await res.json().catch(() => null)) as unknown;
@@ -138,9 +148,31 @@ function sanitize(text: string, secret: string): string {
   return out.slice(0, 400);
 }
 
-async function readError(res: Response, secret: string): Promise<string> {
+/** 上游大多返回 {"error":{"message":...}}，把 JSON 摊平成一句话，别把整段塞给界面 */
+async function readErrorDetail(res: Response, secret: string): Promise<string> {
   const text = await res.text().catch(() => '');
-  return sanitize(text || res.statusText, secret);
+  if (!text) return sanitize(res.statusText, secret);
+  try {
+    const body = JSON.parse(text) as {
+      error?: { message?: unknown } | string;
+      message?: unknown;
+      detail?: unknown;
+    };
+    const message =
+      typeof body.error === 'string'
+        ? body.error
+        : typeof body.error?.message === 'string'
+          ? body.error.message
+          : typeof body.message === 'string'
+            ? body.message
+            : typeof body.detail === 'string'
+              ? body.detail
+              : '';
+    if (message) return sanitize(message, secret);
+  } catch {
+    // 不是 JSON，按原文截断
+  }
+  return sanitize(text, secret);
 }
 
 function networkError(error: unknown): HttpError {
