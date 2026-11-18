@@ -51,6 +51,57 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install-autostart.ps1
 Unregister-ScheduledTask -TaskName InkMate -Confirm:$false
 ```
 
+### Android / Termux（可选，让手机常驻）
+
+不想让电脑常开时，可以把同一套 Node 服务搬到 Android 的 Termux，代码不分叉。App 请从
+[F-Droid](https://f-droid.org/packages/com.termux/) 安装（Play 版已弃用）。
+
+首次安装：
+
+```bash
+pkg update -y && pkg install -y nodejs git
+node -v                                   # 需 ≥ 22.5，才有内置 node:sqlite
+git clone https://github.com/646486604/inkmate.git ~/inkmate
+cd ~/inkmate && npm install && npm run build
+bash scripts/termux-start.sh              # 后台起服务 + 等就绪 + 直接打开浏览器
+```
+
+`scripts/termux-start.sh` 会后台拉起 `apps/server/dist/index.js`，轮询 `/api/health` 就绪后用
+`termux-open-url` 打开 `http://127.0.0.1:8787`，不用手动复制链接。
+
+以后每次：
+
+| 命令 | 作用 |
+|---|---|
+| `bash ~/inkmate/scripts/termux-start.sh` | 启动并打开浏览器 |
+| `bash ~/inkmate/scripts/termux-start.sh restart` | 重启并打开浏览器 |
+| `bash ~/inkmate/scripts/termux-start.sh stop` | 停止 |
+| `bash ~/inkmate/scripts/termux-start.sh status` | 看是否在跑 |
+| `bash ~/inkmate/scripts/termux-start.sh log` | 跟踪 `~/inkmate.log`（Ctrl+C 只退出跟踪） |
+
+更新到最新提交（`data/` 在 gitignore 里，聊天记录不受影响）：
+
+```bash
+cd ~/inkmate && git pull --ff-only && npm install && npm run build && bash scripts/termux-start.sh restart
+```
+
+开机自启（装 Termux:Boot 后，只起服务不弹浏览器）：
+
+```bash
+mkdir -p ~/.termux/boot && cat > ~/.termux/boot/inkmate.sh <<'EOF'
+#!/data/data/com.termux/files/usr/bin/sh
+termux-wake-lock
+INKMATE_NO_OPEN=1 bash $HOME/inkmate/scripts/termux-start.sh start
+EOF
+chmod +x ~/.termux/boot/inkmate.sh
+```
+
+- 手机自己访问 `http://127.0.0.1:8787`；服务仍只监听 `127.0.0.1`，同一 Wi-Fi 的电脑要访问需
+  起服务时加 `HOST=0.0.0.0`，并先改掉默认密码。
+- Node 22 上 `node:sqlite` 可能需要 `--experimental-sqlite`，脚本会自动探测补上。
+- 建议 `termux-wake-lock` + 关闭 Termux 的电池优化；Android 12+ 仍可能杀后台，旧手机插电专用最稳。
+- 手机浏览器里「添加到主屏幕」即可当 PWA 用。
+
 ## M6 能做什么
 
 - 单用户密码登录，会话 Cookie（HttpOnly / SameSite=Lax）
@@ -113,6 +164,7 @@ inkmate/
 | `npm run typecheck` | 构建 shared 后跑三端 TS 检查 |
 | `npm run check` | 同 typecheck |
 | `npm test` | 构建 shared 后跑 Node 内置 schema 测试 |
+| `bash scripts/termux-start.sh` | Termux（Android）上后台启动并打开浏览器，见上文 |
 
 ## 数据与配置
 
