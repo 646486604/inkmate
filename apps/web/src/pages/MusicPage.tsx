@@ -75,7 +75,6 @@ export function MusicPage() {
     durationMs,
     volume,
     mode,
-    loading: playerLoading,
     error: playerError,
     playTrack,
     togglePlay,
@@ -309,7 +308,7 @@ export function MusicPage() {
     }
   }
 
-  if (loading || playerLoading) {
+  if (loading) {
     return (
       <div className="flex justify-center py-20">
         <Loader2 size={20} className="animate-spin text-[var(--faint)]" />

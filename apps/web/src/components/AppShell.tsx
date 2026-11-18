@@ -53,7 +53,7 @@ export function AppShell() {
       </main>
 
       <nav
-        className="sticky bottom-0 z-20 mt-auto flex border-t border-[var(--line)] px-3 backdrop-blur-xl"
+        className="sticky bottom-0 z-20 mt-auto flex border-t border-[var(--line)] px-3"
         style={{
           background: 'var(--nav)',
           paddingBottom: 'max(8px, env(safe-area-inset-bottom))',

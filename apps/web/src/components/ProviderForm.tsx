@@ -51,7 +51,7 @@ const KIND_LABEL: Record<ProviderKind, string> = {
 interface ProviderFormProps {
   provider: ProviderPublic | null;
   onCancel: () => void;
-  onSaved: (provider: ProviderPublic, testNow: boolean) => void;
+  onSaved: (provider: ProviderPublic) => void;
 }
 
 export function ProviderForm({ provider, onCancel, onSaved }: ProviderFormProps) {
@@ -109,13 +109,18 @@ export function ProviderForm({ provider, onCancel, onSaved }: ProviderFormProps)
       }
     } catch (err) {
       setModelFailed(true);
-      setModelNote(err instanceof ApiError ? err.message : '拉取失败，可继续手填');
+      const message = err instanceof ApiError ? err.message : '拉取失败，可继续手填';
+      setModelNote(
+        message.includes('超时')
+          ? `${message}。不少站没开 /models，直接手填模型名就行`
+          : message,
+      );
     } finally {
       setFetchingModels(false);
     }
   }
 
-  async function submit(event: { preventDefault: () => void }, testNow: boolean) {
+  async function submit(event: { preventDefault: () => void }) {
     event.preventDefault();
     if (busy) return;
     setBusy(true);
@@ -137,7 +142,7 @@ export function ProviderForm({ provider, onCancel, onSaved }: ProviderFormProps)
         };
         saved = (await api.createProvider(input)).provider;
       }
-      onSaved(saved, testNow);
+      onSaved(saved);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '保存失败，请稍后再试');
     } finally {
@@ -148,7 +153,7 @@ export function ProviderForm({ provider, onCancel, onSaved }: ProviderFormProps)
   const canSave = Boolean(name.trim() && baseUrl.trim() && model.trim());
 
   return (
-    <form onSubmit={(event) => void submit(event, true)} className="card-solid animate-in mt-4 p-5">
+    <form onSubmit={(event) => void submit(event)} className="card-solid animate-in mt-4 p-5">
       <div className="flex items-start justify-between">
         <div>
           <p className="text-[13px] font-medium text-[var(--ink)]">
@@ -330,15 +335,10 @@ export function ProviderForm({ provider, onCancel, onSaved }: ProviderFormProps)
       <div className="mt-5 flex gap-2">
         <button type="submit" className="btn btn-primary flex-1" disabled={!canSave || busy}>
           {busy ? <Loader2 size={15} className="animate-spin" /> : null}
-          {editing ? '保存并测试' : '接入并测试'}
+          保存
         </button>
-        <button
-          type="button"
-          className="btn btn-ghost"
-          disabled={!canSave || busy}
-          onClick={(event) => void submit(event, false)}
-        >
-          仅保存
+        <button type="button" className="btn btn-ghost" onClick={onCancel} disabled={busy}>
+          取消
         </button>
       </div>
     </form>

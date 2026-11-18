@@ -23,7 +23,6 @@ import type {
   ProviderPatch,
   ProviderPublic,
   PublicUser,
-  TestProviderResult,
   WorldBookEntryInput,
   WorldBookEntryPatch,
   WorldBookEntryPublic,
@@ -42,32 +41,71 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+/** 常规请求 20 秒；上传和备份导入要读大文件，单独放宽 */
+const DEFAULT_TIMEOUT_MS = 20_000;
+const UPLOAD_TIMEOUT_MS = 5 * 60_000;
+
+interface RequestOptions extends RequestInit {
+  timeoutMs?: number;
+}
+
+async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const { timeoutMs = DEFAULT_TIMEOUT_MS, signal, ...init } = options;
   const headers = new Headers(init.headers);
   if (init.body && !(init.body instanceof FormData)) {
     headers.set('content-type', 'application/json');
   }
 
-  let res: Response;
+  // 手机端网络容易半死不活：没有超时的话 UI 会永远转圈，这里统一兜底
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const forwardAbort = () => controller.abort();
+  signal?.addEventListener('abort', forwardAbort);
+
   try {
-    res = await fetch(path, { credentials: 'include', ...init, headers });
-  } catch {
-    throw new ApiError(0, '无法连接服务，请确认后端已经启动');
-  }
-
-  if (!res.ok) {
-    let message = `请求失败（${res.status}）`;
+    let res: Response;
     try {
-      const body = (await res.json()) as { error?: string };
-      if (body.error) message = body.error;
-    } catch {
-      // ignore non-JSON error bodies
+      res = await fetch(path, {
+        credentials: 'include',
+        ...init,
+        headers,
+        signal: controller.signal,
+      });
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      if (controller.signal.aborted) {
+        if (signal?.aborted) throw new ApiError(0, '请求已取消');
+        throw new ApiError(
+          0,
+          `请求超时（${Math.round(timeoutMs / 1000)} 秒没有响应），服务器可能卡住了，稍后重试`,
+        );
+      }
+      throw new ApiError(0, '无法连接服务，请确认后端已经启动');
     }
-    throw new ApiError(res.status, message);
-  }
 
-  if (res.status === 204) return undefined as T;
-  return (await res.json()) as T;
+    if (!res.ok) {
+      let message = `请求失败（${res.status}）`;
+      try {
+        const body = (await res.json()) as { error?: string };
+        if (body.error) message = body.error;
+      } catch {
+        // ignore non-JSON error bodies
+      }
+      throw new ApiError(res.status, message);
+    }
+
+    if (res.status === 204) return undefined as T;
+    return (await res.json()) as T;
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    if (controller.signal.aborted) {
+      throw new ApiError(0, `请求超时（${Math.round(timeoutMs / 1000)} 秒没有响应），稍后重试`);
+    }
+    throw new ApiError(0, '响应解析失败，请重试');
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener('abort', forwardAbort);
+  }
 }
 
 export const api = {
@@ -91,12 +129,11 @@ export const api = {
     }),
   deleteProvider: (id: string) =>
     request<void>(`/api/providers/${id}`, { method: 'DELETE' }),
-  testProvider: (id: string) =>
-    request<TestProviderResult>(`/api/providers/${id}/test`, { method: 'POST' }),
   listProviderModels: (input: ProviderModelsInput) =>
     request<{ models: string[] }>('/api/providers/models', {
       method: 'POST',
       body: JSON.stringify(input),
+      timeoutMs: 15_000,
     }),
 
   characters: () => request<{ characters: CharacterPublic[] }>('/api/characters'),
@@ -149,6 +186,7 @@ export const api = {
     return request<{ url: string; mime: string }>('/api/uploads', {
       method: 'POST',
       body: form,
+      timeoutMs: UPLOAD_TIMEOUT_MS,
     });
   },
 
@@ -243,7 +281,11 @@ export const api = {
 
   musicTracks: () => request<{ tracks: MusicTrack[] }>('/api/music/tracks'),
   uploadMusic: (form: FormData) =>
-    request<{ track: MusicTrack }>('/api/music/tracks', { method: 'POST', body: form }),
+    request<{ track: MusicTrack }>('/api/music/tracks', {
+      method: 'POST',
+      body: form,
+      timeoutMs: UPLOAD_TIMEOUT_MS,
+    }),
   neteaseSearch: (q: string) =>
     request<{ tracks: MusicTrack[] }>(`/api/music/netease/search?q=${encodeURIComponent(q)}`),
   neteaseDaily: () => request<{ tracks: MusicTrack[] }>('/api/music/netease/daily'),
@@ -298,5 +340,6 @@ export const api = {
     request<{ imported: boolean; media: number }>('/api/backup/import', {
       method: 'POST',
       body: form,
+      timeoutMs: UPLOAD_TIMEOUT_MS,
     }),
 };

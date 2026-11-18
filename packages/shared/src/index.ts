@@ -91,13 +91,6 @@ export interface PublicUser {
   persona: string;
 }
 
-export interface TestProviderResult {
-  ok: true;
-  latencyMs: number;
-  model: string;
-  sample: string;
-}
-
 export interface ApiErrorBody {
   error: string;
 }

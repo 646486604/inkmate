@@ -13,7 +13,7 @@ import {
 } from '../db/providers.js';
 import { requireAuth } from '../auth/session.js';
 import { HttpError } from '../lib/http-error.js';
-import { testProvider, listProviderModels } from '../llm/provider.js';
+import { listProviderModels } from '../llm/provider.js';
 
 const providerRoutes: FastifyPluginAsync = async (app) => {
   app.addHook('preHandler', requireAuth);
@@ -59,20 +59,6 @@ const providerRoutes: FastifyPluginAsync = async (app) => {
     const { id } = req.params as { id: string };
     if (!deleteProvider(id)) throw new HttpError(404, '模型服务不存在');
     return reply.code(204).send();
-  });
-
-  app.post('/:id/test', async (req) => {
-    const { id } = req.params as { id: string };
-    const config = getProviderConfig(id);
-    if (!config) throw new HttpError(404, '模型服务不存在');
-
-    return testProvider({
-      kind: config.provider.kind,
-      baseUrl: config.provider.baseUrl,
-      apiKey: config.apiKey,
-      model: config.provider.model,
-      extra: config.extra,
-    });
   });
 };
 

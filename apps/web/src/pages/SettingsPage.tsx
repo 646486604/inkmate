@@ -4,7 +4,6 @@ import {
   Bell,
   BellOff,
   BookOpen,
-  CheckCircle2,
   Database,
   Download,
   KeyRound,
@@ -14,13 +13,11 @@ import {
   Moon,
   Pencil,
   Plus,
-  RefreshCw,
   Server,
   Sun,
   Trash2,
   Upload,
   Users,
-  XCircle,
 } from 'lucide-react';
 import type { ProviderKind, ProviderPublic } from '@inkmate/shared';
 import { api, ApiError } from '../lib/api';
@@ -42,11 +39,6 @@ const KIND_LABEL: Record<ProviderKind, string> = {
   custom: '自定义',
 };
 
-interface TestState {
-  ok: boolean;
-  text: string;
-}
-
 export function SettingsPage() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -55,7 +47,6 @@ export function SettingsPage() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [tests, setTests] = useState<Record<string, TestState>>({});
   const [pushBusy, setPushBusy] = useState(false);
   const [pushOn, setPushOn] = useState(false);
   const [pushPermission, setPushPermission] = useState<NotificationPermission | 'unsupported'>(
@@ -90,34 +81,10 @@ export function SettingsPage() {
       .catch(() => undefined);
   }, [loadProviders]);
 
-  async function runTest(id: string) {
-    setBusyId(id);
-    setTests((current) => {
-      const next = { ...current };
-      delete next[id];
-      return next;
-    });
-    try {
-      const result = await api.testProvider(id);
-      setTests((current) => ({
-        ...current,
-        [id]: { ok: true, text: `连接成功 · ${result.latencyMs}ms · ${result.sample}` },
-      }));
-    } catch (err) {
-      setTests((current) => ({
-        ...current,
-        [id]: { ok: false, text: err instanceof ApiError ? err.message : '连接失败' },
-      }));
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  function handleSaved(provider: ProviderPublic, testNow: boolean) {
+  function handleSaved() {
     setEditing(undefined);
     setError('');
     void loadProviders();
-    if (testNow) void runTest(provider.id);
   }
 
   async function removeProvider(provider: ProviderPublic) {
@@ -246,7 +213,6 @@ export function SettingsPage() {
         ) : (
           <div className="space-y-3">
             {providers.map((provider) => {
-              const test = tests[provider.id];
               const isBusy = busyId === provider.id;
               return (
                 <div key={provider.id} className="card p-4">
@@ -290,15 +256,10 @@ export function SettingsPage() {
                   <div className="mt-3 flex items-center gap-2">
                     <button
                       className="btn btn-ghost h-8 min-h-8 px-3 text-[11px]"
-                      onClick={() => void runTest(provider.id)}
+                      onClick={() => setEditing(provider)}
                       disabled={isBusy}
                     >
-                      {isBusy ? (
-                        <Loader2 size={12} className="animate-spin" />
-                      ) : (
-                        <RefreshCw size={12} />
-                      )}
-                      测试连接
+                      编辑服务
                     </button>
                     {provider.enabled ? (
                       <span className="flex items-center gap-1 text-[10px] text-[var(--faint)]">
@@ -307,23 +268,6 @@ export function SettingsPage() {
                       </span>
                     ) : null}
                   </div>
-
-                  {test ? (
-                    <div
-                      className={`mt-3 flex items-start gap-2 rounded-xl border px-3 py-2 text-[11px] leading-relaxed ${
-                        test.ok
-                          ? 'border-[var(--line)] bg-[var(--accent-soft)] text-[var(--accent-strong)]'
-                          : 'border-[var(--line)] bg-[var(--paper-strong)] text-[var(--muted)]'
-                      }`}
-                    >
-                      {test.ok ? (
-                        <CheckCircle2 size={14} className="mt-0.5 shrink-0" />
-                      ) : (
-                        <XCircle size={14} className="mt-0.5 shrink-0" />
-                      )}
-                      <span className="break-all">{test.text}</span>
-                    </div>
-                  ) : null}
                 </div>
               );
             })}

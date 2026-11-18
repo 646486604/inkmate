@@ -1,4 +1,4 @@
-import type { ProviderExtra, ProviderKind, TestProviderResult } from '@inkmate/shared';
+import type { ProviderExtra, ProviderKind } from '@inkmate/shared';
 import { HttpError } from '../lib/http-error.js';
 
 export interface ProviderConfig {
@@ -9,8 +9,7 @@ export interface ProviderConfig {
   extra?: ProviderExtra;
 }
 
-const TEST_PROMPT = 'Reply with exactly one word: ok';
-const TIMEOUT_MS = 20_000;
+const TIMEOUT_MS = 12_000;
 const MAX_MODELS = 300;
 
 export function buildOpenAIUrl(baseUrl: string, chatPath?: string): string {
@@ -139,31 +138,6 @@ function sanitize(text: string, secret: string): string {
   return out.slice(0, 400);
 }
 
-function extractOpenAIText(data: unknown): string {
-  const body = data as {
-    choices?: Array<{ message?: { content?: string | Array<{ type?: string; text?: string }> } }>;
-  };
-  const content = body.choices?.[0]?.message?.content;
-  if (typeof content === 'string') return content;
-  if (Array.isArray(content)) {
-    return content.map((part) => part.text ?? '').join('');
-  }
-  return '';
-}
-
-function extractGeminiText(data: unknown): string {
-  const body = data as {
-    candidates?: Array<{
-      content?: { parts?: Array<{ text?: string }> };
-    }>;
-  };
-  return (
-    body.candidates?.[0]?.content?.parts
-      ?.map((part) => part.text ?? '')
-      .join('') ?? ''
-  );
-}
-
 async function readError(res: Response, secret: string): Promise<string> {
   const text = await res.text().catch(() => '');
   return sanitize(text || res.statusText, secret);
@@ -173,110 +147,7 @@ function networkError(error: unknown): HttpError {
   if (error instanceof HttpError) return error;
   const message = error instanceof Error ? error.message : String(error);
   if (/abort|timeout/i.test(message)) {
-    return new HttpError(400, '连接超时（20 秒），请检查 Base URL、网络或代理');
+    return new HttpError(400, '连接超时（12 秒），该站可能没开 /models，直接手填模型名即可');
   }
   return new HttpError(400, `无法连接接口：${sanitize(message, '')}`);
-}
-
-async function testOpenAI(config: ProviderConfig): Promise<TestProviderResult> {
-  const started = performance.now();
-  const headers: Record<string, string> = {
-    'content-type': 'application/json',
-    ...(config.extra?.headers ?? {}),
-  };
-  const hasAuth = Object.keys(headers).some((key) => key.toLowerCase() === 'authorization');
-  if (config.apiKey && !hasAuth) {
-    headers.Authorization = `Bearer ${config.apiKey}`;
-  }
-
-  let res: Response;
-  try {
-    res = await fetch(
-      buildOpenAIUrl(config.baseUrl, config.extra?.chatPath),
-      {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          model: config.model,
-          messages: [{ role: 'user', content: TEST_PROMPT }],
-          temperature: 0,
-          max_tokens: 8,
-          stream: false,
-        }),
-        signal: AbortSignal.timeout(TIMEOUT_MS),
-      },
-    );
-  } catch (error) {
-    throw networkError(error);
-  }
-
-  if (!res.ok) {
-    throw new HttpError(400, `接口返回 ${res.status}：${await readError(res, config.apiKey)}`);
-  }
-
-  let data: unknown;
-  try {
-    data = await res.json();
-  } catch {
-    throw new HttpError(400, '接口返回了非 JSON 内容，请检查 Base URL 是否指到了正确的 API');
-  }
-
-  const text = extractOpenAIText(data).trim();
-  return {
-    ok: true,
-    latencyMs: Math.round(performance.now() - started),
-    model: config.model,
-    sample: text.slice(0, 120) || '接口已连通（返回空文本）',
-  };
-}
-
-async function testGemini(config: ProviderConfig): Promise<TestProviderResult> {
-  const started = performance.now();
-  const headers: Record<string, string> = {
-    'content-type': 'application/json',
-    ...(config.extra?.headers ?? {}),
-  };
-  const hasKey = Object.keys(headers).some((key) => key.toLowerCase() === 'x-goog-api-key');
-  if (config.apiKey && !hasKey) headers['x-goog-api-key'] = config.apiKey;
-
-  let res: Response;
-  try {
-    res = await fetch(buildGeminiUrl(config.baseUrl, config.model), {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: TEST_PROMPT }] }],
-        generationConfig: { temperature: 0, maxOutputTokens: 8 },
-      }),
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-    });
-  } catch (error) {
-    throw networkError(error);
-  }
-
-  if (!res.ok) {
-    throw new HttpError(400, `接口返回 ${res.status}：${await readError(res, config.apiKey)}`);
-  }
-
-  let data: unknown;
-  try {
-    data = await res.json();
-  } catch {
-    throw new HttpError(400, '接口返回了非 JSON 内容，请检查 Base URL');
-  }
-
-  const text = extractGeminiText(data).trim();
-  return {
-    ok: true,
-    latencyMs: Math.round(performance.now() - started),
-    model: config.model,
-    sample: text.slice(0, 120) || '接口已连通（返回空文本）',
-  };
-}
-
-export async function testProvider(config: ProviderConfig): Promise<TestProviderResult> {
-  if (!config.model) throw new HttpError(400, '请填写模型名');
-  if (!config.baseUrl) throw new HttpError(400, '请填写 Base URL');
-  if (config.kind === 'gemini') return testGemini(config);
-  return testOpenAI(config);
 }
