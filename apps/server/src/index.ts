@@ -33,6 +33,22 @@ const app = Fastify({
   logger: {
     level: process.env.LOG_LEVEL ?? 'info',
   },
+  // Node 默认要 300 秒才回收卡住的请求。手机上连接半死（切后台、系统冻结、
+  // 浏览器把连接掐了但没发 RST）时，这些请求会一直占着不放，日志里只留下
+  // 一条 incoming request。这里收到 60 秒就掐掉。
+  requestTimeout: 60_000,
+  connectionTimeout: 60_000,
+  keepAliveTimeout: 72_000,
+});
+
+// 时不时会有被冻结/降频拖出来的慢请求，单独 warn 一条，方便在日志里定位
+app.addHook('onResponse', async (req, reply) => {
+  if (reply.elapsedTime > 2_000) {
+    req.log.warn(
+      { url: req.url, method: req.method, ms: Math.round(reply.elapsedTime) },
+      '慢请求',
+    );
+  }
 });
 
 await app.register(cookie);
@@ -101,6 +117,15 @@ await app.register(backupRoutes, { prefix: '/api/backup' });
 if (existsSync(join(webDist, 'index.html'))) {
   await app.register(fastifyStatic, {
     root: webDist,
+    // 自己接管缓存头：带 hash 的产物和图标长缓存，index.html / sw.js 一律回源校验
+    cacheControl: false,
+    setHeaders: (res, filePath) => {
+      if (/[\\/](assets|icons)[\\/]/.test(filePath)) {
+        res.setHeader('cache-control', 'public, max-age=604800, immutable');
+      } else {
+        res.setHeader('cache-control', 'no-cache');
+      }
+    },
   });
 
   app.setNotFoundHandler((req, reply) => {
