@@ -1,0 +1,22 @@
+{
+  "name": "墨伴 InkMate",
+  "short_name": "墨伴",
+  "description": "只给自己用的 AI 陪伴聊天 App",
+  "lang": "zh-CN",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f3ede2",
+  "theme_color": "#b4472f",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "消息", "url": "/", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "动态", "url": "/moments", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "一起听", "url": "/music", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] }
+  ]
+}

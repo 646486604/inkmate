@@ -1,0 +1,24 @@
+{
+  "name": "inkmate",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run build -w @inkmate/shared && concurrently -n server,web -c cyan,magenta \"npm run dev -w @inkmate/server\" \"npm run dev -w @inkmate/web\"",
+    "dev:server": "npm run dev -w @inkmate/server",
+    "dev:web": "npm run dev -w @inkmate/web",
+    "build": "npm run build -w @inkmate/shared && npm run build -w @inkmate/web && npm run build -w @inkmate/server",
+    "start": "npm run start -w @inkmate/server",
+    "typecheck": "npm run build -w @inkmate/shared && npm run typecheck -w @inkmate/shared && npm run typecheck -w @inkmate/server && npm run typecheck -w @inkmate/web",
+    "check": "npm run typecheck",
+    "test": "npm run build -w @inkmate/shared && node --test scripts/test-schemas.mjs"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "typescript": "^5.9.2"
+  }
+}
