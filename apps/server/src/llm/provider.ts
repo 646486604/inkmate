@@ -123,9 +123,14 @@ export async function listProviderModels(config: ProviderConfig): Promise<string
   if (!res.ok) {
     const detail = await readErrorDetail(res, config.apiKey);
     if (res.status === 401 || res.status === 403) {
+      // 把“我们到底发了什么”也报出来：长度对不上就是粘贴不完整，
+      // 长度对但仍被拒，说明这条 key 在平台上已失效
+      const sent = config.apiKey
+        ? `本次发送 ${config.apiKey.length} 个字符，结尾 ****${config.apiKey.slice(-4)}`
+        : '本次没有发送 key（Ollama 之类本地服务才可留空）';
       throw new HttpError(
         400,
-        `API Key 被上游拒绝（${res.status}）：${detail}\n检查 key 是否复制完整、是不是这个平台的 key、有没有被删除或重置`,
+        `API Key 被上游拒绝（${res.status}）：${detail}\n${sent}。DeepSeek 的 key 通常 35 个字符左右（sk- 开头）：长度对不上就是没复制全，长度对得上则是这条 key 已失效或被删`,
       );
     }
     if (res.status === 402) {

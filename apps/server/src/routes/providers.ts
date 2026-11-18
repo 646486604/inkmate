@@ -15,10 +15,13 @@ import { requireAuth } from '../auth/session.js';
 import { HttpError } from '../lib/http-error.js';
 import { listProviderModels } from '../llm/provider.js';
 
-// 手机上从聊天/备忘录复制 key，很容易带上换行、全角空格、零宽字符；
-// 这些会让上游报 401 invalid api key，落库前统一洗掉。
+// 手机上从聊天/备忘录复制 key，很容易带上换行、全角空格、零宽字符，
+// 或者连着 "Bearer " 前缀、引号一起复制；这些都会让上游报 401 invalid api key。
 function cleanKey(value: string): string {
-  return value.replace(/[\s\u00a0\u200b-\u200d\ufeff]/g, '');
+  return value
+    .replace(/[\s\u00a0\u200b-\u200d\ufeff]/g, '')
+    .replace(/^bearer/i, '')
+    .replace(/^["'`]+|["'`]+$/g, '');
 }
 
 const providerRoutes: FastifyPluginAsync = async (app) => {

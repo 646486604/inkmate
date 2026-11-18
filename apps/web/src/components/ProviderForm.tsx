@@ -70,8 +70,11 @@ export function ProviderForm({ provider, onCancel, onSaved }: ProviderFormProps)
 
   const modelListId = `provider-models-${provider?.id ?? 'new'}`;
 
-  // 从手机剪贴板粘过来的 key 常带换行/全角空格/零宽字符，上游会直接判 401
-  const cleanKey = apiKey.replace(/[\s\u00a0\u200b-\u200d\ufeff]/g, '');
+  // 从手机剪贴板粘过来的 key 常带换行/全角空格/零宽字符，或者连着 "Bearer " 和引号，上游会直接判 401
+  const cleanKey = apiKey
+    .replace(/[\s\u00a0\u200b-\u200d\ufeff]/g, '')
+    .replace(/^bearer/i, '')
+    .replace(/^["'`]+|["'`]+$/g, '');
   const keyJunk = apiKey.length - cleanKey.length;
 
   function applyPreset(preset: Preset) {
@@ -329,10 +332,10 @@ export function ProviderForm({ provider, onCancel, onSaved }: ProviderFormProps)
           />
           {cleanKey ? (
             <span className="mt-1.5 block text-[10px] leading-relaxed text-[var(--faint)]">
-              长度 {cleanKey.length}，结尾 ****{cleanKey.slice(-4)}
-              {keyJunk > 0 ? `（已自动去掉 ${keyJunk} 个空白/隐藏字符）` : ''}
+              长度 {cleanKey.length}（DeepSeek 应为 35），结尾 ****{cleanKey.slice(-4)}
+              {keyJunk > 0 ? `（自动去掉了 ${keyJunk} 个多余字符或前缀）` : ''}
               <br />
-              上游报 key 无效时，先对一下这串结尾和平台上的 key 是否一致
+              上游报 key 无效时，先对一下长度和结尾；对不上就是没复制全
             </span>
           ) : null}
         </label>
