@@ -332,7 +332,7 @@ export function ProviderForm({ provider, onCancel, onSaved }: ProviderFormProps)
           />
           {cleanKey ? (
             <span className="mt-1.5 block text-[10px] leading-relaxed text-[var(--faint)]">
-              长度 {cleanKey.length}（DeepSeek 应为 35），结尾 ****{cleanKey.slice(-4)}
+              长度 {cleanKey.length}（DeepSeek 一般 35–40），结尾 ****{cleanKey.slice(-4)}
               {keyJunk > 0 ? `（自动去掉了 ${keyJunk} 个多余字符或前缀）` : ''}
               <br />
               上游报 key 无效时，先对一下长度和结尾；对不上就是没复制全

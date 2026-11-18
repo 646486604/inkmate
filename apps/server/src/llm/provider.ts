@@ -123,15 +123,17 @@ export async function listProviderModels(config: ProviderConfig): Promise<string
   if (!res.ok) {
     const detail = await readErrorDetail(res, config.apiKey);
     if (res.status === 401 || res.status === 403) {
-      // 把“我们到底发了什么”也报出来：长度对不上就是粘贴不完整，
-      // 长度对但仍被拒，说明这条 key 在平台上已失效
+      // 把“我们到底发了什么”也报出来：长度异常就是没复制全，
+      // 长度正常仍被拒，说明这条 key 在平台上已经失效或不属于这个账号
+      const length = config.apiKey.length;
       const sent = config.apiKey
-        ? `本次发送 ${config.apiKey.length} 个字符，结尾 ****${config.apiKey.slice(-4)}`
+        ? `本次发送 ${length} 个字符，结尾 ****${config.apiKey.slice(-4)}`
         : '本次没有发送 key（Ollama 之类本地服务才可留空）';
-      throw new HttpError(
-        400,
-        `API Key 被上游拒绝（${res.status}）：${detail}\n${sent}。DeepSeek 的 key 通常 35 个字符左右（sk- 开头）：长度对不上就是没复制全，长度对得上则是这条 key 已失效或被删`,
-      );
+      const advice =
+        length >= 30 && length <= 60
+          ? '长度看着是完整的，那问题在平台侧：这条 key 可能已被删除/禁用，或不是你当前账号的 key；去控制台新建一条再试'
+          : '长度偏短（DeepSeek 一般 35–40 个字符），大概是没复制全，重新复制一次';
+      throw new HttpError(400, `API Key 被上游拒绝（${res.status}）：${detail}\n${sent}。${advice}`);
     }
     if (res.status === 402) {
       throw new HttpError(400, `上游余额不足（402）：${detail}`);
