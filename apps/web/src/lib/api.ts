@@ -91,6 +91,10 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
       } catch {
         // ignore non-JSON error bodies
       }
+      // 会话失效时，把界面踢回登录页；登录接口自己的 401 是密码错误，不算
+      if (res.status === 401 && path !== '/api/auth/login') {
+        window.dispatchEvent(new Event('inkmate:unauthorized'));
+      }
       throw new ApiError(res.status, message);
     }
 

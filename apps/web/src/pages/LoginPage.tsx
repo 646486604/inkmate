@@ -118,6 +118,10 @@ export function LoginPage() {
             <br />
             数据与 API Key 都留在本机
           </p>
+          {/* 登录态是按 host 存的：localhost 与 127.0.0.1 是两个不同的 cookie 域 */}
+          <p className="mt-2 text-center text-[9px] tabular text-[var(--faint)]">
+            当前地址：{window.location.host}
+          </p>
         </form>
 
         <p className="mt-6 text-center text-[10px] tracking-[0.08em] text-[var(--faint)]">

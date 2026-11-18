@@ -39,6 +39,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void refresh();
   }, [refresh]);
 
+  // 任意请求 401（会话没了/ cookie 没带上）就回到登录页，
+  // 否则会停在各页面里反复报「未登录」
+  useEffect(() => {
+    const onUnauthorized = () => setUser(null);
+    window.addEventListener('inkmate:unauthorized', onUnauthorized);
+    return () => window.removeEventListener('inkmate:unauthorized', onUnauthorized);
+  }, []);
+
   const login = useCallback(async (password: string) => {
     const result = await api.login(password);
     setUser(result.user);

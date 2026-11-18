@@ -86,7 +86,17 @@ export function cleanupExpiredSessions(): void {
 }
 
 export async function requireAuth(req: FastifyRequest, reply: FastifyReply): Promise<void> {
-  if (!req.user) {
-    await reply.code(401).send({ error: '未登录' });
-  }
+  if (req.user) return;
+  // 401 只有两种可能：浏览器没把 cookie 带上来，或者带上来的 token 在库里查不到。
+  // 日志里把这两者区分开，省得每次都靠猜。
+  req.log.warn(
+    {
+      host: req.headers.host,
+      origin: req.headers.origin,
+      cookie: req.cookies[SESSION_COOKIE] ? 'present' : 'missing',
+      ua: (req.headers['user-agent'] ?? '').slice(0, 90),
+    },
+    '401 未登录',
+  );
+  await reply.code(401).send({ error: '未登录' });
 }
