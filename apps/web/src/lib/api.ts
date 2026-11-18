@@ -109,6 +109,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 }
 
 export const api = {
+  health: () => request<{ ok: boolean }>('/api/health', { timeoutMs: 5_000 }),
   me: () => request<{ user: PublicUser }>('/api/auth/me'),
   login: (password: string) =>
     request<{ user: PublicUser }>('/api/auth/login', {

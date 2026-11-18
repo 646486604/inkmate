@@ -1,5 +1,7 @@
+import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { Images, MessageCircle, Music2, UserRound } from 'lucide-react';
+import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useMusicPlayer } from '../lib/music-player';
 
@@ -23,12 +25,41 @@ export function AppShell() {
   const { user } = useAuth();
   const { current } = useMusicPlayer();
   const location = useLocation();
+  const [online, setOnline] = useState(true);
   const title = TITLES[location.pathname] ?? '墨伴';
   const messagesSection =
     location.pathname === '/' || location.pathname.startsWith('/characters');
   const settingsSection =
     location.pathname === '/settings' || location.pathname.startsWith('/world-books');
   const showMini = Boolean(current) && location.pathname !== '/music';
+
+  // 手机后台冻结或服务卡死时，先把「在线」变「离线」，
+  // 比所有页面一起转圈更容易判断是服务没响应还是页面自身的问题。
+  useEffect(() => {
+    let alive = true;
+    const ping = () => {
+      if (document.hidden) return;
+      api
+        .health()
+        .then(() => {
+          if (alive) setOnline(true);
+        })
+        .catch(() => {
+          if (alive) setOnline(false);
+        });
+    };
+    ping();
+    const timer = window.setInterval(ping, 15_000);
+    const onVisible = () => {
+      if (!document.hidden) ping();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, []);
 
   return (
     <div className="app-frame flex min-h-dvh flex-col">
@@ -38,9 +69,12 @@ export function AppShell() {
           <h1 className="mt-1 font-display text-[26px] leading-none text-[var(--ink)]">{title}</h1>
         </div>
         <div className="flex items-center gap-2">
-          <span className="chip">
-            <span className="badge-dot" />
-            在线
+          <span
+            className={`chip ${online ? '' : 'text-[var(--accent-strong)]'}`}
+            title={online ? '服务在响应' : '服务 5 秒没响应：Termux 可能被系统冻结，或进程已退出'}
+          >
+            <span className="badge-dot" style={online ? undefined : { background: 'var(--accent-strong)' }} />
+            {online ? '在线' : '离线'}
           </span>
           <div className="grid h-10 w-10 place-items-center rounded-full border border-[var(--line)] bg-[var(--seal-bg)] text-[13px] font-medium text-[var(--seal-fg)] shadow-sm">
             {(user?.displayName || '我').slice(0, 1)}
