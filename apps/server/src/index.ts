@@ -57,9 +57,39 @@ await app.register(multipart, {
 });
 
 // 必须在注册路由/插件之前设置，子上下文才会继承这个错误处理器
+const FIELD_LABELS: Record<string, string> = {
+  content: '内容',
+  title: '标题',
+  name: '名称',
+  description: '描述',
+  nickname: '昵称',
+  persona: '人设',
+  greeting: '开场白',
+  password: '密码',
+  model: '模型名',
+  baseUrl: 'Base URL',
+  apiKey: 'API Key',
+  memoryLimit: '记忆轮数',
+  sortOrder: '排序',
+};
+
 app.setErrorHandler((error, req, reply) => {
   if (error instanceof ZodError) {
-    return reply.code(400).send({ error: error.issues[0]?.message ?? '参数不正确' });
+    const issue = error.issues[0];
+    let message = issue?.message ?? '参数不正确';
+    if (issue) {
+      const field = issue.path.join('.');
+      const label = FIELD_LABELS[field] ?? field ?? '内容';
+      // zod 的默认文案是英文，这里翻成人话，并把上限带上
+      if (issue.code === 'too_big') {
+        const max = 'maximum' in issue ? issue.maximum : undefined;
+        message = `${label}超过上限${max === undefined ? '' : `（最多 ${max}）`}`;
+      } else if (issue.code === 'too_small') {
+        const min = 'minimum' in issue ? issue.minimum : undefined;
+        message = `${label}低于下限${min === undefined ? '' : `（至少 ${min}）`}`;
+      }
+    }
+    return reply.code(400).send({ error: message });
   }
   if (error instanceof HttpError) {
     return reply.code(error.statusCode).send({ error: error.message });

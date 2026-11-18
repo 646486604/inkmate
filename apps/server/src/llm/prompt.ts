@@ -5,11 +5,11 @@ import type {
   MessagePublic,
   PublicUser,
 } from '@inkmate/shared';
+import { WORLD_BOOK_CHAR_BUDGET } from '@inkmate/shared';
 import type { ChatMessage } from './stream.js';
 
 const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六'];
 const HISTORY_CHAR_BUDGET = 12_000;
-const WORLD_CHAR_BUDGET = 4_000;
 
 interface WorldEntryInput {
   title: string;
@@ -77,9 +77,9 @@ export function buildChatMessages(options: {
     let total = 0;
     const lines: string[] = [];
     for (const entry of entries) {
-      if (total >= WORLD_CHAR_BUDGET) break;
+      if (total >= WORLD_BOOK_CHAR_BUDGET) break;
       const title = entry.title.trim() || '未命名条目';
-      const content = entry.content.trim().slice(0, WORLD_CHAR_BUDGET - total);
+      const content = entry.content.trim().slice(0, WORLD_BOOK_CHAR_BUDGET - total);
       lines.push(`《${entry.bookName}》${title}\n${content}`);
       total += content.length;
     }
@@ -188,8 +188,8 @@ export function buildGroupMessages(options: {
     let total = 0;
     const lines: string[] = [];
     for (const entry of worldEntries) {
-      if (entry.position !== position || total >= WORLD_CHAR_BUDGET) continue;
-      const content = entry.content.trim().slice(0, WORLD_CHAR_BUDGET - total);
+      if (entry.position !== position || total >= WORLD_BOOK_CHAR_BUDGET) continue;
+      const content = entry.content.trim().slice(0, WORLD_BOOK_CHAR_BUDGET - total);
       lines.push(`《${entry.bookName}》${entry.title || '未命名'}\n${content}`);
       total += content.length;
     }
@@ -279,8 +279,8 @@ export function buildProactiveMessages(options: {
     let total = 0;
     const lines: string[] = [];
     for (const entry of worldEntries) {
-      if (entry.position !== position || total >= WORLD_CHAR_BUDGET) continue;
-      const content = entry.content.trim().slice(0, WORLD_CHAR_BUDGET - total);
+      if (entry.position !== position || total >= WORLD_BOOK_CHAR_BUDGET) continue;
+      const content = entry.content.trim().slice(0, WORLD_BOOK_CHAR_BUDGET - total);
       lines.push(`《${entry.bookName}》${entry.title || '未命名'}\n${content}`);
       total += content.length;
     }

@@ -15,6 +15,7 @@ import {
   X,
 } from 'lucide-react';
 import type { WorldBookEntryPublic, WorldBookPublic } from '@inkmate/shared';
+import { WORLD_BOOK_CHAR_BUDGET, WORLD_BOOK_ENTRY_CONTENT_MAX } from '@inkmate/shared';
 import { api, ApiError } from '../lib/api';
 
 interface BookFormState {
@@ -65,6 +66,28 @@ export function WorldBooksPage() {
   }, [load]);
 
   const selected = books?.find((book) => book.id === selectedId) ?? null;
+
+  // 和 lib/llm/prompt.ts 的裁剪逻辑保持一致：按顺序累加，超出预算的条目不进提示词
+  function usageFor(position: 'before' | 'after') {
+    const marks = new Map<string, 'full' | 'partial' | 'dropped'>();
+    let total = 0;
+    for (const entry of selected?.entries ?? []) {
+      if (!entry.enabled || entry.position !== position) continue;
+      const text = entry.content.trim();
+      if (total >= WORLD_BOOK_CHAR_BUDGET) {
+        marks.set(entry.id, 'dropped');
+        continue;
+      }
+      const used = Math.min(text.length, WORLD_BOOK_CHAR_BUDGET - total);
+      marks.set(entry.id, used < text.length ? 'partial' : 'full');
+      total += used;
+    }
+    return { total, marks };
+  }
+
+  const beforeUsage = usageFor('before');
+  const afterUsage = usageFor('after');
+  const budgetLabel = WORLD_BOOK_CHAR_BUDGET.toLocaleString();
 
   async function saveBook() {
     if (!bookForm || !bookForm.name.trim() || busy) return;
@@ -202,6 +225,7 @@ export function WorldBooksPage() {
             <h2 className="mt-1 font-display text-[29px] leading-tight">给角色一个世界</h2>
             <p className="mt-2 text-[11px] leading-relaxed text-[var(--faint)]">
               条目按「前/后」注入到人设两侧；可按角色关联多本。适合写背景、关系、称呼、规则。
+              拼进提示词时「前」「后」各最多 {budgetLabel} 个字符，按排序号从小到大取，超出的不生效。
             </p>
           </section>
 
@@ -275,6 +299,10 @@ export function WorldBooksPage() {
             <p className="mt-2 text-[11px] leading-relaxed text-[var(--muted)]">
               {selected.description || '还没有描述'}
             </p>
+            <p className="mt-2 text-[10px] tabular leading-relaxed text-[var(--faint)]">
+              前注入 {beforeUsage.total.toLocaleString()} / {budgetLabel} 字符 · 后注入{' '}
+              {afterUsage.total.toLocaleString()} / {budgetLabel} 字符
+            </p>
             <div className="mt-3 flex gap-2">
               <button
                 className="btn btn-ghost h-8 min-h-8 px-3 text-[10px]"
@@ -321,6 +349,14 @@ export function WorldBooksPage() {
                         <span className="chip shrink-0">
                           {entry.position === 'before' ? '前注入' : '后注入'}
                         </span>
+                        {entry.enabled && (entry.position === 'before' ? beforeUsage : afterUsage).marks.get(entry.id) === 'dropped' ? (
+                          <span className="chip shrink-0 text-[var(--accent-strong)]">
+                            预算外·不生效
+                          </span>
+                        ) : null}
+                        {entry.enabled && (entry.position === 'before' ? beforeUsage : afterUsage).marks.get(entry.id) === 'partial' ? (
+                          <span className="chip shrink-0 text-[var(--accent-strong)]">后半被截断</span>
+                        ) : null}
                         {!entry.enabled ? <span className="chip">已停用</span> : null}
                       </div>
                       <p className="mt-1 line-clamp-2 whitespace-pre-wrap text-[11px] leading-relaxed text-[var(--muted)]">
@@ -388,6 +424,7 @@ export function WorldBooksPage() {
                 setBookForm({ ...bookForm, description: event.target.value })
               }
               placeholder="一句话描述（可选）"
+              maxLength={500}
             />
           </div>
           <button
@@ -424,7 +461,17 @@ export function WorldBooksPage() {
               value={entryForm.content}
               onChange={(event) => setEntryForm({ ...entryForm, content: event.target.value })}
               placeholder="背景、规则、关系、称呼……"
+              maxLength={WORLD_BOOK_ENTRY_CONTENT_MAX}
             />
+            <div className="flex items-center justify-between text-[10px] tabular text-[var(--faint)]">
+              <span>
+                {entryForm.content.length.toLocaleString()} /{' '}
+                {WORLD_BOOK_ENTRY_CONTENT_MAX.toLocaleString()} 字
+              </span>
+              <span>
+                注入预算：前 / 后 各 {budgetLabel} 字，按排序号先后取
+              </span>
+            </div>
             <div className="grid grid-cols-3 gap-3">
               <label className="block">
                 <span className="mb-1.5 block text-[10px] text-[var(--muted)]">注入位置</span>
