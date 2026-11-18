@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
-import { loginSchema } from '@inkmate/shared';
+import { loginSchema, profilePatchSchema } from '@inkmate/shared';
 import { getDb } from '../db/index.js';
+import { updateUserProfile } from '../db/users.js';
 import { verifyPassword } from '../auth/password.js';
 import {
   cleanupExpiredSessions,
@@ -32,6 +33,14 @@ const authRoutes: FastifyPluginAsync = async (app) => {
 
   app.get('/me', { preHandler: requireAuth }, async (req) => {
     return { user: req.user };
+  });
+
+  app.patch('/me', { preHandler: requireAuth }, async (req) => {
+    if (!req.user) throw new Error('未登录');
+    const patch = profilePatchSchema.parse(req.body);
+    const user = updateUserProfile(req.user.id, patch);
+    if (!user) throw new Error('保存失败');
+    return { user };
   });
 
   app.post('/logout', async (req, reply) => {

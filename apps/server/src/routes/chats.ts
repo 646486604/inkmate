@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import {
   chatCreateSchema,
+  chatIdentitySchema,
   factInputSchema,
   regenerateSchema,
   sendMessageSchema,
@@ -23,6 +24,7 @@ import {
   listMessages,
   markChatRead,
   touchChat,
+  updateChatIdentity,
 } from '../db/chats.js';
 import { HttpError } from '../lib/http-error.js';
 import { resolveAssistantTarget, streamAssistantReply } from '../services/assistant.js';
@@ -60,6 +62,15 @@ const chatRoutes: FastifyPluginAsync = async (app) => {
   app.get('/:id', async (req) => {
     const { id } = req.params as { id: string };
     const chat = getChat(id);
+    if (!chat) throw new HttpError(404, '会话不存在');
+    return { chat };
+  });
+
+  // 会话级「我」的身份：不同角色面前可以是不同的人
+  app.patch('/:id', async (req) => {
+    const { id } = req.params as { id: string };
+    const input = chatIdentitySchema.parse(req.body);
+    const chat = updateChatIdentity(id, input);
     if (!chat) throw new HttpError(404, '会话不存在');
     return { chat };
   });

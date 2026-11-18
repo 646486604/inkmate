@@ -22,3 +22,24 @@ export function getPrimaryUser(): PublicUser | null {
     persona: row.persona,
   };
 }
+
+/** 全局「我」的名字与人设；会话里没单独设置时用这份 */
+export function updateUserProfile(
+  id: string,
+  patch: { displayName?: string; persona?: string },
+): PublicUser | null {
+  const sets: string[] = [];
+  const values: string[] = [];
+  if (patch.displayName !== undefined) {
+    sets.push('display_name = ?');
+    values.push(patch.displayName);
+  }
+  if (patch.persona !== undefined) {
+    sets.push('persona = ?');
+    values.push(patch.persona);
+  }
+  if (sets.length === 0) return getPrimaryUser();
+  values.push(id);
+  getDb().prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`).run(...values);
+  return getPrimaryUser();
+}

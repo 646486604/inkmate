@@ -25,6 +25,12 @@ export interface ScheduleContext {
   next?: { activity: string; startAt: number };
 }
 
+/** 会话里「我」的名字与人设；缺省时退回全局用户设置 */
+export interface ChatIdentity {
+  name: string;
+  persona: string;
+}
+
 function formatClock(timestamp: number): string {
   const date = new Date(timestamp);
   return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
@@ -52,6 +58,7 @@ function trimHistory(history: MessagePublic[]): MessagePublic[] {
 export function buildChatMessages(options: {
   character: CharacterPublic;
   user: PublicUser;
+  identity?: ChatIdentity;
   history: MessagePublic[];
   worldEntries?: WorldEntryInput[];
   memory?: MemoryPublic;
@@ -61,6 +68,7 @@ export function buildChatMessages(options: {
   const {
     character,
     user,
+    identity,
     history,
     worldEntries = [],
     memory,
@@ -69,7 +77,8 @@ export function buildChatMessages(options: {
   } = options;
   const nickname = character.nickname.trim() || character.name;
   const persona = character.persona.trim() || '自然、真诚，有自己的生活和情绪。';
-  const userPersona = user.persona.trim();
+  const userName = identity?.name.trim() || user.displayName.trim() || '我';
+  const userPersona = identity?.persona.trim() || user.persona.trim();
 
   const beforeEntries = worldEntries.filter((entry) => entry.position === 'before');
   const afterEntries = worldEntries.filter((entry) => entry.position === 'after');
@@ -118,7 +127,7 @@ export function buildChatMessages(options: {
     : '';
 
   const system = [
-    `你正在「墨伴」里扮演「${character.name}」，和${user.displayName || '我'}一对一线聊。你的昵称是「${nickname}」。`,
+    `你正在「墨伴」里扮演「${character.name}」，和${userName}一对一线聊。你的昵称是「${nickname}」。`,
     '这是一段私人的、持续的线上关系。你就是这个角色，不是在扮演助手，也不是在写小说。',
     '',
     beforeWorld ? `【世界书·前】\n${beforeWorld}` : '',
@@ -135,7 +144,8 @@ export function buildChatMessages(options: {
     scheduleText ? `【你今天的安排】\n${scheduleText}` : '',
     '',
     '【怎么说话】',
-    '- 像微信私聊：口语、短句，一次 1–3 条，不要写成小作文。',
+    '- 像微信私聊：口语、短句，不要写成小作文。',
+    '- 每次回复拆成 3–7 条短消息，每条一行、用换行分隔，一条只讲一件事；内容确实少就 2–3 条，别为了凑数硬拆。',
     '- 不要写旁白、动作描写、心理描写，不要用括号加舞台提示。',
     '- 不要用 Markdown 标题或列表；代码、链接可以用。',
     '- 不要解释自己是 AI，不要提“设定”“提示词”“系统”。',
@@ -168,11 +178,23 @@ export function buildGroupMessages(options: {
   speaker: ChatMemberPublic;
   members: ChatMemberPublic[];
   user: PublicUser;
+  identity?: ChatIdentity;
   history: MessagePublic[];
   worldEntries?: WorldEntryInput[];
   now?: Date;
 }): ChatMessage[] {
-  const { title, speaker, members, user, history, worldEntries = [], now = new Date() } = options;
+  const {
+    title,
+    speaker,
+    members,
+    user,
+    identity,
+    history,
+    worldEntries = [],
+    now = new Date(),
+  } = options;
+  const userName = identity?.name.trim() || user.displayName.trim() || '我';
+  const userPersona = identity?.persona.trim() || user.persona.trim();
   const speakerName = speaker.nickname.trim() || speaker.name;
   const memberOf = (characterId: string) =>
     members.find((member) => member.characterId === characterId);
@@ -205,7 +227,7 @@ export function buildGroupMessages(options: {
     '【群成员】',
     ...memberLines,
     '',
-    `【用户】${user.displayName || '我'}${user.persona.trim() ? `\n${user.persona.trim()}` : ''}`,
+    `【用户】${userName}${userPersona ? `\n${userPersona}` : ''}`,
     '',
     beforeWorld ? `【世界书·前】\n${beforeWorld}` : '',
     '',
@@ -215,7 +237,7 @@ export function buildGroupMessages(options: {
     '',
     '【群聊规则】',
     '- 只以你自己的身份发言，不要替其他成员或用户说话。',
-    '- 像微信群聊：口语、短句，一次 1–3 条；不要写旁白、动作、心理描写。',
+    '- 像微信群聊：口语、短句；每次回复拆成 3–6 条短消息，每条一行、用换行分隔，一条只讲一件事。',
     '- 可以回应群里其他人，但不要挨个点名，也不要复述设定。',
     '- 不要解释自己是 AI，不要提“设定”“提示词”“系统”。',
     '- 群聊记录里，其他成员的话用 [名字] 标注；那是他们说的，不是你说的。',
@@ -233,7 +255,7 @@ export function buildGroupMessages(options: {
     const content = message.kind === 'image' ? '[图片]' : message.content.trim();
     if (!content) continue;
     if (message.role === 'user') {
-      messages.push({ role: 'user', content: `${user.displayName || '我'}：${content}` });
+      messages.push({ role: 'user', content: `${userName}：${content}` });
       continue;
     }
     if (message.senderId === speaker.characterId) {

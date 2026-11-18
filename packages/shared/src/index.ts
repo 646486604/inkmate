@@ -191,12 +191,31 @@ export interface ChatPublic {
   characterAvatar: string;
   characterColor: string;
   members: ChatMemberPublic[];
+  /** 这个会话里「我」的名字与人设；空串表示用全局默认 */
+  userName: string;
+  userPersona: string;
   lastMessage: string;
   lastMessageKind: MessageKind;
   lastMessageAt: number | null;
   unreadCount: number;
   createdAt: number;
 }
+
+export const chatIdentitySchema = z.object({
+  userName: z.string().trim().max(40, '名字最多 40 个字').optional(),
+  userPersona: z.string().trim().max(4000, '身份设定最多 4000 个字').optional(),
+});
+export type ChatIdentityInput = z.infer<typeof chatIdentitySchema>;
+
+export const profilePatchSchema = z.object({
+  displayName: z.string().trim().max(40, '名字最多 40 个字').optional(),
+  persona: z.string().trim().max(4000, '人设最多 4000 个字').optional(),
+});
+export type ProfilePatch = z.infer<typeof profilePatchSchema>;
+
+/** 表情包：上传到服务端，按 /media/<name> 的列表保存 */
+export const STICKER_MAX_COUNT = 80;
+export const STICKER_MAX_BYTES = 2 * 1024 * 1024;
 
 export const sendMessageSchema = z.object({
   content: z.string().trim().min(1, '消息不能为空').max(8000),

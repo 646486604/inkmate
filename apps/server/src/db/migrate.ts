@@ -31,4 +31,8 @@ export function migrate(db: DatabaseSync): void {
   addColumn(db, 'messages', 'client_id', 'TEXT');
   addColumn(db, 'messages', 'edited_at', 'INTEGER');
   addColumn(db, 'messages', 'deleted_at', 'INTEGER');
+
+  // 会话级「我」的身份：空串表示沿用全局 user.persona / displayName
+  addColumn(db, 'chats', 'user_name', "TEXT NOT NULL DEFAULT ''");
+  addColumn(db, 'chats', 'user_persona', "TEXT NOT NULL DEFAULT ''");
 }

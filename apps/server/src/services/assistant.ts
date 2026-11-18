@@ -144,18 +144,25 @@ export async function streamAssistantReply(options: {
 
   const config = resolveProviderForCharacter(character);
   const history = getRecentMessages(chatId, character.memoryLimit || 40);
+  // 会话里可以给「我」单独设一套名字和人设；没设就沿用全局
+  const identity = {
+    name: (chat.user_name ?? '').trim(),
+    persona: (chat.user_persona ?? '').trim(),
+  };
   const messages = isGroup
     ? buildGroupMessages({
         title: chat.title,
         speaker: speaker!,
         members,
         user: request.user,
+        identity,
         history,
         worldEntries,
       })
     : buildChatMessages({
         character,
         user: request.user,
+        identity,
         history,
         worldEntries,
         memory: memory ?? undefined,

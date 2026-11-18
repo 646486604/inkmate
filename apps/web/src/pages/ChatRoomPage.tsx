@@ -17,12 +17,14 @@ import {
   Music2,
   Pause,
   Pencil,
+  Plus,
   Play,
   RefreshCw,
   SkipForward,
   Smile,
   Square,
   Trash2,
+  UserRound,
   Users,
   X,
 } from 'lucide-react';
@@ -74,6 +76,19 @@ function Markdown({ content }: { content: string }) {
   );
 }
 
+/** 模型会把一次回复拆成多行，这里按换行还原成多个气泡 */
+function splitBubbles(text: string): string[] {
+  const parts = text
+    .split(/\n+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  return parts.slice(0, 8);
+}
+
+const BUBBLE_BASE = 'rounded-2xl px-3.5 py-2.5 text-[13px] leading-relaxed';
+const BUBBLE_MINE = `${BUBBLE_BASE} rounded-br-md bg-[var(--ink)] text-[var(--paper)]`;
+const BUBBLE_OTHER = `${BUBBLE_BASE} rounded-bl-md border border-[var(--line)] bg-[var(--card-solid)] text-[var(--ink)]`;
+
 export function ChatRoomPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -97,6 +112,13 @@ export function ChatRoomPage() {
   const [sending, setSending] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
+  const [stickerTab, setStickerTab] = useState<'emoji' | 'sticker'>('emoji');
+  const [stickers, setStickers] = useState<string[]>([]);
+  const [stickerBusy, setStickerBusy] = useState(false);
+  const [identityOpen, setIdentityOpen] = useState(false);
+  const [identityName, setIdentityName] = useState('');
+  const [identityPersona, setIdentityPersona] = useState('');
+  const [identityBusy, setIdentityBusy] = useState(false);
   const [actionId, setActionId] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
@@ -105,7 +127,21 @@ export function ChatRoomPage() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const stickerRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    api
+      .stickers()
+      .then((result) => {
+        if (alive) setStickers(result.stickers);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!id) return;
@@ -254,17 +290,18 @@ export function ChatRoomPage() {
     }
   }
 
-  async function sendImage(file: File) {
+  async function sendImage(input: File | string) {
     if (!id || sending) return;
-    setUploading(true);
+    setUploading(typeof input !== 'string');
     setError('');
     try {
-      const uploaded = await api.upload(file);
+      const uploadedUrl =
+        typeof input === 'string' ? input : (await api.upload(input)).url;
       const controller = beginStream();
       try {
         await streamAssistant(
           `/api/chats/${id}/messages`,
-          { content: uploaded.url, kind: 'image' },
+          { content: uploadedUrl, kind: 'image' },
           {
             onStart: (data) => {
               if (data.userMessage) setMessages((current) => upsert(current, data.userMessage!));
@@ -393,6 +430,56 @@ export function ChatRoomPage() {
     if (file) void sendImage(file);
   }
 
+  function openIdentity() {
+    setIdentityName(chat?.userName || user?.displayName || '');
+    setIdentityPersona(chat?.userPersona || user?.persona || '');
+    setIdentityOpen(true);
+    setMenuOpen(false);
+  }
+
+  async function saveIdentity() {
+    if (!id || identityBusy) return;
+    setIdentityBusy(true);
+    setError('');
+    try {
+      const result = await api.updateChat(id, {
+        userName: identityName.trim(),
+        userPersona: identityPersona.trim(),
+      });
+      setChat(result.chat);
+      setIdentityOpen(false);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '保存身份失败');
+    } finally {
+      setIdentityBusy(false);
+    }
+  }
+
+  async function handleStickerUpload(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (event.target) event.target.value = '';
+    if (!file || stickerBusy) return;
+    setStickerBusy(true);
+    setError('');
+    try {
+      const result = await api.addSticker(file);
+      setStickers(result.stickers);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '表情包上传失败');
+    } finally {
+      setStickerBusy(false);
+    }
+  }
+
+  async function removeSticker(url: string) {
+    try {
+      const result = await api.removeSticker(url);
+      setStickers(result.stickers);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '删除表情失败');
+    }
+  }
+
   const isGroup = chat?.kind === 'group';
   const characterName = isGroup
     ? chat?.title ?? '群聊'
@@ -479,6 +566,13 @@ export function ChatRoomPage() {
                   </button>
                 </>
               ) : null}
+              <button
+                className="block w-full rounded-lg px-3 py-2 text-left hover:bg-[var(--accent-soft)]"
+                onClick={openIdentity}
+              >
+                <UserRound size={12} className="mr-1.5 inline" />
+                我的身份
+              </button>
               <button
                 className="block w-full rounded-lg px-3 py-2 text-left hover:bg-[var(--accent-soft)]"
                 onClick={() => navigate('/characters')}
@@ -603,39 +697,43 @@ export function ChatRoomPage() {
                     {isGroup && !mine ? (
                       <p className="mb-0.5 ml-0.5 text-[9px] text-[var(--faint)]">{speakerName}</p>
                     ) : null}
-                    <div
-                      className={`relative rounded-2xl px-3.5 py-2.5 text-[13px] leading-relaxed ${
-                        mine
-                          ? 'rounded-br-md bg-[var(--ink)] text-[var(--paper)]'
-                          : 'rounded-bl-md border border-[var(--line)] bg-[var(--card-solid)] text-[var(--ink)]'
-                      }`}
-                    >
-                      {message.deletedAt ? (
+                    {message.deletedAt ? (
+                      <div className={`relative ${mine ? BUBBLE_MINE : BUBBLE_OTHER}`}>
                         <span className="text-[11px] italic opacity-60">消息已删除</span>
-                      ) : message.kind === 'image' ? (
+                      </div>
+                    ) : message.kind === 'image' ? (
+                      <div className={`relative ${mine ? BUBBLE_MINE : BUBBLE_OTHER}`}>
                         <img
                           src={message.content}
                           alt="图片消息"
                           className="max-h-64 max-w-full cursor-zoom-in rounded-xl"
                           onClick={() => window.open(message.content, '_blank')}
                         />
-                      ) : mine ? (
+                      </div>
+                    ) : mine ? (
+                      <div className={`relative ${BUBBLE_MINE}`}>
                         <p className="whitespace-pre-wrap break-words">{message.content}</p>
-                      ) : (
-                        <Markdown content={message.content} />
-                      )}
-                      {!message.deletedAt ? (
-                        <button
-                          className={`absolute top-0 rounded-md p-1 text-[var(--faint)] opacity-60 transition group-hover:opacity-100 ${
-                            mine ? '-left-7' : '-right-7'
-                          } hover:text-[var(--ink)]`}
-                          onClick={() => setActionId(isAction ? null : message.id)}
-                          aria-label="消息操作"
-                        >
-                          <MoreHorizontal size={13} />
-                        </button>
-                      ) : null}
-                    </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {splitBubbles(message.content).map((part, bubbleIndex) => (
+                          <div key={bubbleIndex} className={BUBBLE_OTHER}>
+                            <Markdown content={part} />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {!message.deletedAt ? (
+                      <button
+                        className={`absolute top-0 rounded-md p-1 text-[var(--faint)] opacity-60 transition group-hover:opacity-100 ${
+                          mine ? '-left-7' : '-right-7'
+                        } hover:text-[var(--ink)]`}
+                        onClick={() => setActionId(isAction ? null : message.id)}
+                        aria-label="消息操作"
+                      >
+                        <MoreHorizontal size={13} />
+                      </button>
+                    ) : null}
 
                     {message.editedAt ? (
                       <p className={`mt-1 text-[9px] text-[var(--faint)] ${mine ? 'text-right' : ''}`}>
@@ -715,17 +813,23 @@ export function ChatRoomPage() {
                     {streamSpeakerName}
                   </p>
                 ) : null}
-                <div className="rounded-2xl rounded-bl-md border border-[var(--line)] bg-[var(--card-solid)] px-3.5 py-2.5 text-[13px] leading-relaxed">
-                  {streaming.text ? (
-                    <p className="whitespace-pre-wrap break-words">{streaming.text}</p>
-                  ) : (
+                {streaming.text ? (
+                  <div className="space-y-1.5">
+                    {splitBubbles(streaming.text).map((part, bubbleIndex) => (
+                      <div key={bubbleIndex} className={BUBBLE_OTHER}>
+                        <p className="whitespace-pre-wrap break-words">{part}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className={BUBBLE_OTHER}>
                     <span className="flex items-center gap-1 py-1">
                       <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--faint)]" />
                       <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--faint)] [animation-delay:120ms]" />
                       <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--faint)] [animation-delay:240ms]" />
                     </span>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
             </div>
           ) : null}
@@ -751,16 +855,93 @@ export function ChatRoomPage() {
         ) : null}
 
         {emojiOpen ? (
-          <div className="mb-2 grid grid-cols-8 gap-1 rounded-2xl border border-[var(--line)] bg-[var(--card-solid)] p-2">
-            {EMOJIS.map((emoji) => (
-              <button
-                key={emoji}
-                className="rounded-lg py-1 text-lg hover:bg-[var(--accent-soft)]"
-                onClick={() => pickEmoji(emoji)}
-              >
-                {emoji}
-              </button>
-            ))}
+          <div className="mb-2 rounded-2xl border border-[var(--line)] bg-[var(--card-solid)] p-2">
+            <div className="mb-2 flex items-center justify-between">
+              <div className="flex gap-1">
+                {(
+                  [
+                    ['emoji', '表情'],
+                    ['sticker', `表情包 ${stickers.length ? stickers.length : ''}`.trim()],
+                  ] as const
+                ).map(([value, label]) => (
+                  <button
+                    key={value}
+                    className={`rounded-lg px-2.5 py-1 text-[10px] ${
+                      stickerTab === value
+                        ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]'
+                        : 'text-[var(--muted)]'
+                    }`}
+                    onClick={() => setStickerTab(value)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {stickerTab === 'sticker' ? (
+                <button
+                  className="btn btn-quiet h-6 min-h-6 px-2 text-[10px]"
+                  disabled={stickerBusy}
+                  onClick={() => stickerRef.current?.click()}
+                >
+                  {stickerBusy ? (
+                    <Loader2 size={11} className="animate-spin" />
+                  ) : (
+                    <Plus size={11} />
+                  )}
+                  上传
+                </button>
+              ) : null}
+            </div>
+
+            <input
+              ref={stickerRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif,image/avif"
+              className="hidden"
+              onChange={handleStickerUpload}
+            />
+
+            {stickerTab === 'emoji' ? (
+              <div className="grid grid-cols-8 gap-1">
+                {EMOJIS.map((emoji) => (
+                  <button
+                    key={emoji}
+                    className="rounded-lg py-1 text-lg hover:bg-[var(--accent-soft)]"
+                    onClick={() => pickEmoji(emoji)}
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+            ) : stickers.length === 0 ? (
+              <p className="py-4 text-center text-[10px] leading-relaxed text-[var(--faint)]">
+                还没有表情包。点右上角「上传」，选一张图（≤2MB），之后一点就发出去。
+              </p>
+            ) : (
+              <div className="grid max-h-56 grid-cols-5 gap-2 overflow-y-auto">
+                {stickers.map((url) => (
+                  <div key={url} className="relative">
+                    <button
+                      className="block w-full overflow-hidden rounded-xl border border-[var(--line)]"
+                      onClick={() => {
+                        setEmojiOpen(false);
+                        void sendImage(url);
+                      }}
+                      aria-label="发送表情"
+                    >
+                      <img src={url} alt="" className="h-16 w-full object-cover" />
+                    </button>
+                    <button
+                      className="absolute -right-1 -top-1 grid h-5 w-5 place-items-center rounded-full bg-black/60 text-white"
+                      onClick={() => void removeSticker(url)}
+                      aria-label="删除表情"
+                    >
+                      <X size={11} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         ) : null}
 
@@ -813,6 +994,59 @@ export function ChatRoomPage() {
           )}
         </div>
       </div>
+
+      {identityOpen ? (
+        <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/40 px-4 pb-4 sm:items-center">
+          <div className="card-solid w-full max-w-[440px] p-5">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-[13px] font-medium">我在这个会话里的身份</p>
+                <p className="mt-1 text-[10px] leading-relaxed text-[var(--faint)]">
+                  只影响这个会话；留空就用「我的设定」里的全局默认。
+                </p>
+              </div>
+              <button
+                className="btn btn-quiet h-8 min-h-8 px-2"
+                onClick={() => setIdentityOpen(false)}
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <input
+              className="field mt-3"
+              value={identityName}
+              onChange={(event) => setIdentityName(event.target.value)}
+              placeholder="名字，例如：林晚"
+              maxLength={40}
+            />
+            <textarea
+              className="field mt-2 min-h-[110px] resize-y"
+              value={identityPersona}
+              onChange={(event) => setIdentityPersona(event.target.value)}
+              placeholder="在这个角色面前，你是什么身份、什么关系、什么性格……"
+              maxLength={4000}
+            />
+            <div className="mt-2 flex items-center justify-between">
+              <span className="text-[9px] tabular text-[var(--faint)]">
+                {identityPersona.length} / 4000
+              </span>
+              <div className="flex gap-2">
+                <button className="btn btn-ghost h-8 min-h-8 px-3 text-[11px]" onClick={() => setIdentityOpen(false)}>
+                  取消
+                </button>
+                <button
+                  className="btn btn-primary h-8 min-h-8 px-3 text-[11px]"
+                  disabled={identityBusy}
+                  onClick={() => void saveIdentity()}
+                >
+                  {identityBusy ? <Loader2 size={12} className="animate-spin" /> : null}
+                  保存
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {memoryOpen && id ? (
         <MemoryPanel chatId={id} onClose={() => setMemoryOpen(false)} />

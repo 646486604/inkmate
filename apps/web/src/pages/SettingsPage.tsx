@@ -17,6 +17,7 @@ import {
   Sun,
   Trash2,
   Upload,
+  UserRound,
   Users,
 } from 'lucide-react';
 import type { ProviderKind, ProviderPublic } from '@inkmate/shared';
@@ -40,7 +41,7 @@ const KIND_LABEL: Record<ProviderKind, string> = {
 };
 
 export function SettingsPage() {
-  const { user, logout } = useAuth();
+  const { user, logout, refresh } = useAuth();
   const navigate = useNavigate();
   const [providers, setProviders] = useState<ProviderPublic[] | null>(null);
   const [editing, setEditing] = useState<ProviderPublic | null | undefined>(undefined);
@@ -58,7 +59,35 @@ export function SettingsPage() {
   const [theme, setTheme] = useState<ThemeMode>(() => getThemeMode());
   const [fontSize, setFontSizeState] = useState<FontSize>(() => getFontSize());
   const [importing, setImporting] = useState(false);
+  const [profileName, setProfileName] = useState('');
+  const [profilePersona, setProfilePersona] = useState('');
+  const [profileBusy, setProfileBusy] = useState(false);
   const backupInput = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!user) return;
+    setProfileName(user.displayName ?? '');
+    setProfilePersona(user.persona ?? '');
+  }, [user]);
+
+  async function saveProfile() {
+    if (profileBusy) return;
+    setProfileBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      await api.updateProfile({
+        displayName: profileName.trim(),
+        persona: profilePersona.trim(),
+      });
+      await refresh();
+      setNotice('「我的设定」已保存');
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '保存失败');
+    } finally {
+      setProfileBusy(false);
+    }
+  }
 
   const loadProviders = useCallback(async () => {
     try {
@@ -175,6 +204,47 @@ export function SettingsPage() {
           {notice}
         </div>
       ) : null}
+
+      <section className="card p-4">
+        <div className="flex items-start gap-3">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-2xl bg-[var(--accent-soft)] text-[var(--accent)]">
+            <UserRound size={16} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[13px] font-medium">我的设定</p>
+            <p className="mt-1 text-[10px] leading-relaxed text-[var(--faint)]">
+              角色眼里「你」是谁。默认全局生效；某个会话要换身份，去聊天页右上角单独设置。
+            </p>
+            <input
+              className="field mt-3"
+              value={profileName}
+              onChange={(event) => setProfileName(event.target.value)}
+              placeholder="名字，例如：林晚"
+              maxLength={40}
+            />
+            <textarea
+              className="field mt-2 min-h-[80px] resize-y"
+              value={profilePersona}
+              onChange={(event) => setProfilePersona(event.target.value)}
+              placeholder="身份、性格、和 TA 的关系……"
+              maxLength={4000}
+            />
+            <div className="mt-2 flex items-center justify-between">
+              <span className="text-[9px] tabular text-[var(--faint)]">
+                {profilePersona.length} / 4000
+              </span>
+              <button
+                className="btn btn-primary h-8 min-h-8 px-3 text-[11px]"
+                disabled={profileBusy}
+                onClick={() => void saveProfile()}
+              >
+                {profileBusy ? <Loader2 size={12} className="animate-spin" /> : null}
+                保存设定
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
 
       <section>
         <div className="mb-3 flex items-center justify-between">

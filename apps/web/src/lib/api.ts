@@ -2,6 +2,7 @@ import type {
   CharacterInput,
   CharacterPatch,
   CharacterPublic,
+  ChatIdentityInput,
   ChatPublic,
   DayPlanPublic,
   FactInput,
@@ -18,6 +19,7 @@ import type {
   MusicCommentPublic,
   MusicSession,
   MusicTrack,
+  ProfilePatch,
   ProviderInput,
   ProviderModelsInput,
   ProviderPatch,
@@ -115,6 +117,11 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 export const api = {
   health: () => request<{ ok: boolean }>('/api/health', { timeoutMs: 5_000 }),
   me: () => request<{ user: PublicUser }>('/api/auth/me'),
+  updateProfile: (patch: ProfilePatch) =>
+    request<{ user: PublicUser }>('/api/auth/me', {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    }),
   login: (password: string) =>
     request<{ user: PublicUser }>('/api/auth/login', {
       method: 'POST',
@@ -167,6 +174,25 @@ export const api = {
       body: JSON.stringify({ kind: 'group', title, characterIds }),
     }),
   chat: (id: string) => request<{ chat: ChatPublic }>(`/api/chats/${id}`),
+  updateChat: (id: string, input: ChatIdentityInput) =>
+    request<{ chat: ChatPublic }>(`/api/chats/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    }),
+  stickers: () => request<{ stickers: string[] }>('/api/stickers'),
+  addSticker: (file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+    return request<{ url: string; stickers: string[] }>('/api/stickers', {
+      method: 'POST',
+      body: form,
+      timeoutMs: UPLOAD_TIMEOUT_MS,
+    });
+  },
+  removeSticker: (url: string) =>
+    request<{ stickers: string[] }>(`/api/stickers?url=${encodeURIComponent(url)}`, {
+      method: 'DELETE',
+    }),
   messages: (id: string, options: { limit?: number; before?: number } = {}) => {
     const params = new URLSearchParams();
     if (options.limit) params.set('limit', String(options.limit));

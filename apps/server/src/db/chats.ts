@@ -16,6 +16,8 @@ export interface ChatRow {
   kind: string;
   title: string;
   character_id: string | null;
+  user_name: string;
+  user_persona: string;
   last_message_at: number | null;
   unread_count: number;
   created_at: number;
@@ -117,6 +119,8 @@ function toChatPublic(row: ChatJoinRow): ChatPublic {
     characterAvatar: row.character_avatar ?? '',
     characterColor: row.character_color ?? '#b4472f',
     members: row.kind === 'group' ? getChatMembers(row.id) : [],
+    userName: row.user_name ?? '',
+    userPersona: row.user_persona ?? '',
     lastMessage: row.last_message ?? '',
     lastMessageKind: row.last_message_kind ?? 'text',
     lastMessageAt: row.last_message_at,
@@ -266,8 +270,30 @@ export function deleteChat(id: string): boolean {
   }
 }
 
-export function clearChat(id: string): void {
-  const db = getDb();
+/** 会话级「我」的身份；空串表示沿用全局 */
+export function updateChatIdentity(
+  id: string,
+  patch: { userName?: string; userPersona?: string },
+): ChatPublic | null {
+  if (!getChatRow(id)) return null;
+  const sets: string[] = [];
+  const values: string[] = [];
+  if (patch.userName !== undefined) {
+    sets.push('user_name = ?');
+    values.push(patch.userName);
+  }
+  if (patch.userPersona !== undefined) {
+    sets.push('user_persona = ?');
+    values.push(patch.userPersona);
+  }
+  if (sets.length > 0) {
+    values.push(id);
+    getDb().prepare(`UPDATE chats SET ${sets.join(', ')} WHERE id = ?`).run(...values);
+  }
+  return getChat(id);
+}
+
+export function clearChat(id: string): void {  const db = getDb();
   db.prepare('DELETE FROM messages WHERE chat_id = ?').run(id);
   db.prepare('UPDATE chats SET unread_count = 0, last_message_at = NULL WHERE id = ?').run(id);
 }

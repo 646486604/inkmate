@@ -18,6 +18,7 @@ import eventRoutes from './routes/events.js';
 import momentRoutes from './routes/moments.js';
 import musicRoutes from './routes/music.js';
 import pushRoutes from './routes/push.js';
+import stickerRoutes from './routes/stickers.js';
 import backupRoutes from './routes/backup.js';
 import { startProactiveScheduler } from './services/schedule.js';
 import { startMomentScheduler } from './services/moments.js';
@@ -71,6 +72,9 @@ const FIELD_LABELS: Record<string, string> = {
   apiKey: 'API Key',
   memoryLimit: '记忆轮数',
   sortOrder: '排序',
+  userName: '名字',
+  userPersona: '身份设定',
+  displayName: '名字',
 };
 
 app.setErrorHandler((error, req, reply) => {
@@ -142,6 +146,7 @@ await app.register(eventRoutes, { prefix: '/api/events' });
 await app.register(momentRoutes, { prefix: '/api/moments' });
 await app.register(musicRoutes, { prefix: '/api/music' });
 await app.register(pushRoutes, { prefix: '/api/push' });
+await app.register(stickerRoutes, { prefix: '/api/stickers' });
 await app.register(backupRoutes, { prefix: '/api/backup' });
 
 if (existsSync(join(webDist, 'index.html'))) {
