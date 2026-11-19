@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -50,6 +50,17 @@ export function WorldBooksPage() {
   const [entryForm, setEntryForm] = useState<EntryFormState | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const entryFormRef = useRef<HTMLDivElement>(null);
+  const entryOpen = Boolean(entryForm);
+
+  // 表单在页面最底部，手机上很容易看不见；打开时自动滚过去
+  useEffect(() => {
+    if (!entryOpen) return;
+    const timer = window.setTimeout(() => {
+      entryFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 60);
+    return () => window.clearTimeout(timer);
+  }, [entryOpen]);
 
   const load = useCallback(async () => {
     try {
@@ -167,6 +178,18 @@ export function WorldBooksPage() {
       await load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '更新条目失败');
+    }
+  }
+
+  async function toggleEntryPosition(entry: WorldBookEntryPublic) {
+    if (!selected) return;
+    try {
+      await api.updateWorldBookEntry(selected.id, entry.id, {
+        position: entry.position === 'before' ? 'after' : 'before',
+      });
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '切换位置失败');
     }
   }
 
@@ -346,9 +369,14 @@ export function WorldBooksPage() {
                         <p className="truncate text-[12px] font-medium">
                           {entry.title || '未命名条目'}
                         </p>
-                        <span className="chip shrink-0">
-                          {entry.position === 'before' ? '前注入' : '后注入'}
-                        </span>
+                        <button
+                          type="button"
+                          className="chip shrink-0 transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                          title="点一下切换前/后注入"
+                          onClick={() => void toggleEntryPosition(entry)}
+                        >
+                          {entry.position === 'before' ? '前注入' : '后注入'} ⇄
+                        </button>
                         {entry.enabled && (entry.position === 'before' ? beforeUsage : afterUsage).marks.get(entry.id) === 'dropped' ? (
                           <span className="chip shrink-0 text-[var(--accent-strong)]">
                             预算外·不生效
@@ -439,7 +467,7 @@ export function WorldBooksPage() {
       ) : null}
 
       {entryForm && selected ? (
-        <div className="card-solid animate-in p-5">
+        <div ref={entryFormRef} className="card-solid animate-in p-5">
           <div className="flex items-center justify-between">
             <p className="text-[13px] font-medium">
               {entryForm.id ? '编辑条目' : '新增条目'}
@@ -456,6 +484,32 @@ export function WorldBooksPage() {
               placeholder="条目标题（可选）"
               maxLength={120}
             />
+
+            <div>
+              <span className="mb-1.5 block text-[10px] tracking-[0.16em] text-[var(--muted)]">
+                插入位置
+              </span>
+              <div className="flex gap-2">
+                {(
+                  [
+                    ['before', '前注入 · 放在人设之前'],
+                    ['after', '后注入 · 放在人设之后'],
+                  ] as const
+                ).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    className={`btn h-9 min-h-9 flex-1 text-[10px] ${
+                      entryForm.position === value ? 'btn-primary' : 'btn-ghost'
+                    }`}
+                    onClick={() => setEntryForm({ ...entryForm, position: value })}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <textarea
               className="field min-h-[140px] resize-y"
               value={entryForm.content}
@@ -463,32 +517,16 @@ export function WorldBooksPage() {
               placeholder="背景、规则、关系、称呼……"
               maxLength={WORLD_BOOK_ENTRY_CONTENT_MAX}
             />
-            <div className="flex items-center justify-between text-[10px] tabular text-[var(--faint)]">
+            <div className="flex flex-wrap items-center justify-between gap-1 text-[10px] tabular text-[var(--faint)]">
               <span>
                 {entryForm.content.length.toLocaleString()} /{' '}
                 {WORLD_BOOK_ENTRY_CONTENT_MAX.toLocaleString()} 字
               </span>
               <span>
-                注入预算：前 / 后 各 {budgetLabel} 字，按排序号先后取
+                进提示词的前 / 后各 {budgetLabel} 字，超出部分忽略
               </span>
             </div>
-            <div className="grid grid-cols-3 gap-3">
-              <label className="block">
-                <span className="mb-1.5 block text-[10px] text-[var(--muted)]">注入位置</span>
-                <select
-                  className="field"
-                  value={entryForm.position}
-                  onChange={(event) =>
-                    setEntryForm({
-                      ...entryForm,
-                      position: event.target.value as 'before' | 'after',
-                    })
-                  }
-                >
-                  <option value="before">前</option>
-                  <option value="after">后</option>
-                </select>
-              </label>
+            <div className="grid grid-cols-2 gap-3">
               <label className="block">
                 <span className="mb-1.5 block text-[10px] text-[var(--muted)]">排序</span>
                 <input

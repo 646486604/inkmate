@@ -394,9 +394,9 @@ export const worldBookPatchSchema = z.object({
 export type WorldBookPatch = z.infer<typeof worldBookPatchSchema>;
 
 /** 单条世界书条目的字符上限（数据库能存更多，但提示词放不下） */
-export const WORLD_BOOK_ENTRY_CONTENT_MAX = 20_000;
+export const WORLD_BOOK_ENTRY_CONTENT_MAX = 100_000;
 /** 拼进提示词时「前」/「后」各能容纳的字符数，超出部分会被截断/丢弃 */
-export const WORLD_BOOK_CHAR_BUDGET = 12_000;
+export const WORLD_BOOK_CHAR_BUDGET = 24_000;
 
 export const worldBookEntryInputSchema = z.object({
   title: z.string().trim().max(120).optional().default(''),
