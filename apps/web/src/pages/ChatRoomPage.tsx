@@ -431,8 +431,8 @@ export function ChatRoomPage() {
   async function removeMessage(message: MessagePublic) {
     if (!window.confirm('删除这条消息？')) return;
     try {
-      const result = await api.deleteMessage(message.id);
-      setMessages((current) => upsert(current, result.message));
+      await api.deleteMessage(message.id);
+      setMessages((current) => current.filter((item) => item.id !== message.id));
       setActionId(null);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '删除失败');
@@ -450,8 +450,8 @@ export function ChatRoomPage() {
     const content = lines.join('\n').trim();
     try {
       if (!content) {
-        const result = await api.deleteMessage(message.id);
-        setMessages((list) => upsert(list, result.message));
+        await api.deleteMessage(message.id);
+        setMessages((list) => list.filter((item) => item.id !== message.id));
       } else {
         const result = await api.editMessage(message.id, content);
         setMessages((list) => upsert(list, result.message));
@@ -468,8 +468,8 @@ export function ChatRoomPage() {
     const content = lines.join('\n').trim();
     try {
       if (!content) {
-        const result = await api.deleteMessage(message.id);
-        setMessages((list) => upsert(list, result.message));
+        await api.deleteMessage(message.id);
+        setMessages((list) => list.filter((item) => item.id !== message.id));
         setActionId(null);
       } else {
         const result = await api.editMessage(message.id, content);
@@ -803,10 +803,12 @@ export function ChatRoomPage() {
 
         <div className="space-y-1">
           {messages.map((message, index) => {
+            // 删掉的消息直接不显示，不留占位气泡
+            if (message.deletedAt) return null;
             if (message.role === 'system') {
               return (
                 <p key={message.id} className="py-2 text-center text-[10px] text-[var(--faint)]">
-                  {message.deletedAt ? '消息已删除' : message.content}
+                  {message.content}
                 </p>
               );
             }
@@ -860,21 +862,7 @@ export function ChatRoomPage() {
                     {isGroup && !mine ? (
                       <p className="mb-0.5 ml-0.5 text-[9px] text-[var(--faint)]">{speakerName}</p>
                     ) : null}
-                    {message.deletedAt ? (
-                      <div
-                        className={`relative ${
-                          mine
-                            ? grouped
-                              ? BUBBLE_MINE_FLAT
-                              : BUBBLE_MINE
-                            : grouped
-                              ? BUBBLE_OTHER_FLAT
-                              : BUBBLE_OTHER
-                        }`}
-                      >
-                        <span className="text-[11px] italic opacity-60">消息已删除</span>
-                      </div>
-                    ) : message.kind === 'image' ? (
+                    {message.kind === 'image' ? (
                       <div
                         className={`relative ${
                           mine

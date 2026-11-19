@@ -378,7 +378,7 @@ export function listMessages(chatId: string, limit: number, before?: number): Me
   const rows = db
     .prepare(
       `SELECT * FROM messages
-       WHERE chat_id = ? AND (? IS NULL OR created_at < ?)
+       WHERE chat_id = ? AND deleted_at IS NULL AND (? IS NULL OR created_at < ?)
        ORDER BY created_at DESC, id DESC LIMIT ?`,
     )
     .all(chatId, before ?? null, before ?? null, safeLimit + 1) as unknown as MessageRow[];
