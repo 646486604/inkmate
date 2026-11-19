@@ -863,20 +863,21 @@ export function ChatRoomPage() {
         </div>
       ) : null}
 
-      <div
-        ref={scrollRef}
-        className="flex-1 overflow-y-auto px-4 py-4"
-        style={
-          chat?.background
-            ? {
-                backgroundImage: `url(${chat.background})`,
-                backgroundSize: 'cover',
-                backgroundPosition: 'center',
-                backgroundAttachment: 'local',
-              }
-            : undefined
-        }
-      >
+      <div className="relative min-h-0 flex-1 overflow-hidden">
+        {chat?.background ? (
+          <div
+            className="pointer-events-none absolute inset-0"
+            style={{
+              backgroundImage: `url(${chat.background})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+            }}
+          />
+        ) : null}
+        <div
+          ref={scrollRef}
+          className="relative h-full overflow-y-auto px-4 py-4"
+        >
         {hasMore ? (
           <div className="mb-4 text-center">
             <button
@@ -1223,6 +1224,7 @@ export function ChatRoomPage() {
             </div>
           ) : null}
         </div>
+      </div>
       </div>
 
       <div
