@@ -89,9 +89,24 @@ function Markdown({ content }: { content: string }) {
   );
 }
 
+/** 防御：模型偶尔会把历史里的 [12:30] 抄进正文，渲染时也清一遍 */
+function stripTimeMarkers(text: string): string {
+  return text
+    .split('\n')
+    .map((line) =>
+      line
+        .replace(/^\s*\[\d{1,2}:\d{2}\]\s*/, '')
+        .replace(/^\s*\[\s*\d{1,2}\s*月\s*\d{1,2}\s*日[^\]]*\]\s*/, '')
+        .replace(/（距上一条[^）]*）/g, '')
+        .replace(/\(距上一条[^)]*\)/g, '')
+        .trim(),
+    )
+    .join('\n');
+}
+
 /** 模型会把一次回复拆成多行，这里按换行还原成多个气泡 */
 function splitBubbles(text: string): string[] {
-  const parts = text
+  const parts = stripTimeMarkers(text)
     .split(/\n+/)
     .map((part) => part.trim())
     .filter(Boolean);
@@ -100,7 +115,7 @@ function splitBubbles(text: string): string[] {
 
 /** 带原始行号的版本，用来定位“第几个气泡”做局部编辑/删除 */
 function bubbleEntries(text: string): Array<{ text: string; index: number }> {
-  return text
+  return stripTimeMarkers(text)
     .split('\n')
     .map((line, index) => ({ text: line.trim(), index }))
     .filter((entry) => entry.text.length > 0)

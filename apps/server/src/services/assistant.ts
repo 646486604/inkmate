@@ -45,6 +45,23 @@ const PACKET_LINE = /^\s*\[(?:红包|red-?packet)\s*[:：]\s*(.+?)\]\s*$/i;
 const PROMISE_LINE = /^\s*\[(?:约|约定|提醒|remind)\s*[:：]\s*(\d{1,2})\s*[:：]\s*(\d{2})\s*([^\]]*?)\]\s*$/i;
 const AGENDA_LINE = /^\s*\[(?:日程|安排|agenda)\s*[:：]\s*(.+?)\]\s*$/i;
 
+/** 模型有时会把历史里的「[时间]」抄进回复，这里清掉，别让它显示成假的时间戳 */
+function stripTimeMarkers(text: string): string {
+  return text
+    .split('\n')
+    .map((line) =>
+      line
+        .replace(/^\s*\[\d{1,2}:\d{2}\]\s*/, '')
+        .replace(/^\s*\[\s*\d{1,2}\s*月\s*\d{1,2}\s*日[^\]]*\]\s*/, '')
+        .replace(/（距上一条[^）]*）/g, '')
+        .replace(/\(距上一条[^)]*\)/g, '')
+        .trim(),
+    )
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 function todayKey(date = new Date()): string {
   const pad = (value: number) => String(value).padStart(2, '0');
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
@@ -339,7 +356,7 @@ export async function streamAssistantReply(options: {
       event(reply, 'delta', { text: delta });
     }
 
-    const parts = parseReply(content.trim(), listStickers());
+    const parts = parseReply(stripTimeMarkers(content.trim()), listStickers());
     if (parts.length === 0) {
       throw new HttpError(502, '模型没有返回内容');
     }
@@ -410,7 +427,7 @@ export async function streamAssistantReply(options: {
   } catch (error) {
     const aborted = controller.signal.aborted || reply.raw.destroyed;
     const message = error instanceof HttpError ? error.message : '生成失败，请稍后重试';
-    const text = content.trim();
+    const text = stripTimeMarkers(content.trim());
 
     // 重新生成失败时不要再存半截内容，旧消息保持原样，避免看起来像“记录消失了”
     if (text && !replaceMessageId) {
