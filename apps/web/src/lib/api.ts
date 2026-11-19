@@ -200,6 +200,10 @@ export const api = {
       method: 'DELETE',
     }),
   settings: () => request<{ weatherCity: string }>('/api/settings'),
+  weatherNow: () =>
+    request<{ city: string; text: string; error: string }>('/api/settings/weather', {
+      timeoutMs: 25_000,
+    }),
   updateSettings: (patch: { weatherCity?: string }) =>
     request<{ weatherCity: string }>('/api/settings', {
       method: 'PUT',

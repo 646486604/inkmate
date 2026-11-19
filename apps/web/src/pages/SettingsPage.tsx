@@ -65,6 +65,8 @@ export function SettingsPage() {
   const [profileBusy, setProfileBusy] = useState(false);
   const [weatherCity, setWeatherCity] = useState('');
   const [weatherSaving, setWeatherSaving] = useState(false);
+  const [weatherPreview, setWeatherPreview] = useState('');
+  const [weatherChecking, setWeatherChecking] = useState(false);
   const backupInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -73,6 +75,20 @@ export function SettingsPage() {
       .then((result) => setWeatherCity(result.weatherCity))
       .catch(() => undefined);
   }, []);
+
+  async function checkWeather() {
+    if (weatherChecking) return;
+    setWeatherChecking(true);
+    setWeatherPreview('');
+    try {
+      const result = await api.weatherNow();
+      setWeatherPreview(result.text || result.error || '取不到天气');
+    } catch (err) {
+      setWeatherPreview(err instanceof ApiError ? err.message : '取不到天气');
+    } finally {
+      setWeatherChecking(false);
+    }
+  }
 
   async function saveWeatherCity() {
     if (weatherSaving) return;
@@ -272,7 +288,20 @@ export function SettingsPage() {
                 {weatherSaving ? <Loader2 size={12} className="animate-spin" /> : null}
                 保存
               </button>
+              <button
+                className="btn btn-ghost h-10 min-h-10 px-3 text-[11px]"
+                disabled={weatherChecking}
+                onClick={() => void checkWeather()}
+              >
+                {weatherChecking ? <Loader2 size={12} className="animate-spin" /> : null}
+                看天气
+              </button>
             </div>
+            {weatherPreview ? (
+              <p className="mt-2 rounded-xl bg-[var(--paper-strong)] px-3 py-2 text-[10px] leading-relaxed text-[var(--muted)]">
+                {weatherPreview}
+              </p>
+            ) : null}
           </div>
         </div>
       </section>

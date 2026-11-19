@@ -86,6 +86,15 @@ function splitBubbles(text: string): string[] {
   return parts.slice(0, 8);
 }
 
+/** 带原始行号的版本，用来定位“第几个气泡”做局部编辑/删除 */
+function bubbleEntries(text: string): Array<{ text: string; index: number }> {
+  return text
+    .split('\n')
+    .map((line, index) => ({ text: line.trim(), index }))
+    .filter((entry) => entry.text.length > 0)
+    .slice(0, 8);
+}
+
 const BUBBLE_BASE = 'rounded-2xl px-3.5 py-2.5 text-[13px] leading-relaxed';
 const BUBBLE_MINE = `${BUBBLE_BASE} rounded-br-md bg-[var(--ink)] text-[var(--paper)]`;
 const BUBBLE_MINE_FLAT = `${BUBBLE_BASE} bg-[var(--ink)] text-[var(--paper)]`;
@@ -263,7 +272,6 @@ export function ChatRoomPage() {
     if (batch.length === 0) return;
 
     setInput('');
-    setPending([]);
     setEmojiOpen(false);
     const controller = beginStream();
     try {
@@ -276,6 +284,8 @@ export function ChatRoomPage() {
             if (inserted.length > 0) {
               setMessages((current) => inserted.reduce((acc, message) => upsert(acc, message), current));
             }
+            // 服务端已经落库，占位的「待发」气泡可以撤掉了
+            setPending([]);
             setStreamingSpeaker(data.speaker ?? null);
             setStreaming({ text: '', createdAt: data.createdAt });
           },
@@ -300,7 +310,7 @@ export function ChatRoomPage() {
     } catch (err) {
       if (!controller.signal.aborted) {
         setError(err instanceof ApiError ? err.message : '发送失败');
-        setInput(batch.join('\n'));
+        setPending(batch);
       }
       finishStream();
     }
@@ -426,6 +436,46 @@ export function ChatRoomPage() {
       setActionId(null);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '删除失败');
+    }
+  }
+
+  /** 只改/删其中一个气泡：把那条气泡对应的行改掉，其余保持 */
+  async function editBubble(message: MessagePublic, lineIndex: number, current: string) {
+    const next = window.prompt('改这一条气泡', current);
+    if (next === null) return;
+    const lines = message.content.split('\n');
+    const text = next.trim();
+    if (text) lines[lineIndex] = text;
+    else lines.splice(lineIndex, 1);
+    const content = lines.join('\n').trim();
+    try {
+      if (!content) {
+        const result = await api.deleteMessage(message.id);
+        setMessages((list) => upsert(list, result.message));
+      } else {
+        const result = await api.editMessage(message.id, content);
+        setMessages((list) => upsert(list, result.message));
+      }
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '修改失败');
+    }
+  }
+
+  async function deleteBubble(message: MessagePublic, lineIndex: number) {
+    const lines = message.content.split('\n');
+    lines.splice(lineIndex, 1);
+    const content = lines.join('\n').trim();
+    try {
+      if (!content) {
+        const result = await api.deleteMessage(message.id);
+        setMessages((list) => upsert(list, result.message));
+        setActionId(null);
+      } else {
+        const result = await api.editMessage(message.id, content);
+        setMessages((list) => upsert(list, result.message));
+      }
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '删除气泡失败');
     }
   }
 
@@ -848,14 +898,30 @@ export function ChatRoomPage() {
                       </div>
                     ) : (
                       <div className="space-y-1.5">
-                        {splitBubbles(message.content).map((part, bubbleIndex) => (
+                        {bubbleEntries(message.content).map((entry, bubbleIndex) => (
                           <div
-                            key={bubbleIndex}
+                            key={entry.index}
                             className={
                               bubbleIndex === 0 && !grouped ? BUBBLE_OTHER : BUBBLE_OTHER_FLAT
                             }
                           >
-                            <Markdown content={part} />
+                            <Markdown content={entry.text} />
+                            {isAction ? (
+                              <div className="mt-1.5 flex gap-3 border-t border-[var(--line)] pt-1.5 text-[10px] text-[var(--faint)]">
+                                <button
+                                  className="hover:text-[var(--accent)]"
+                                  onClick={() => void editBubble(message, entry.index, entry.text)}
+                                >
+                                  改这条
+                                </button>
+                                <button
+                                  className="hover:text-[var(--accent-strong)]"
+                                  onClick={() => void deleteBubble(message, entry.index)}
+                                >
+                                  删这条
+                                </button>
+                              </div>
+                            ) : null}
                           </div>
                         ))}
                       </div>
@@ -925,6 +991,27 @@ export function ChatRoomPage() {
               </div>
             );
           })}
+
+          {pending.map((text, index) => (
+            <div key={`pending-${index}`} className="flex justify-end">
+              <div className="max-w-[78%]">
+                <div className="rounded-2xl rounded-br-md border border-dashed border-[var(--line-strong)] bg-[var(--paper-strong)] px-3.5 py-2.5 text-[13px] leading-relaxed text-[var(--muted)]">
+                  <span className="whitespace-pre-wrap break-words">{text}</span>
+                </div>
+                <button
+                  className="mt-0.5 block w-full text-right text-[9px] text-[var(--faint)]"
+                  onClick={() =>
+                    setPending((current) => current.filter((_, itemIndex) => itemIndex !== index))
+                  }
+                >
+                  待发 · 点这里移除
+                </button>
+              </div>
+              <div className="ml-2 mt-1 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[var(--seal-bg)] text-[10px] font-medium text-[var(--seal-fg)]">
+                {(user?.displayName || '我').slice(0, 1)}
+              </div>
+            </div>
+          ))}
 
           {streaming ? (
             <div className="flex items-start gap-2">
@@ -1096,20 +1183,11 @@ export function ChatRoomPage() {
         ) : null}
 
         {pending.length > 0 ? (
-          <div className="mb-2 flex flex-wrap items-center gap-1.5 rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] px-2 py-1.5">
-            <span className="text-[9px] text-[var(--faint)]">待发 {pending.length} 条</span>
-            {pending.map((text, index) => (
-              <span key={`${index}-${text.slice(0, 8)}`} className="chip max-w-[45%]">
-                <span className="truncate">{text}</span>
-                <button
-                  className="ml-0.5 text-[var(--faint)]"
-                  onClick={() => setPending((current) => current.filter((_, i) => i !== index))}
-                  aria-label="移除"
-                >
-                  <X size={10} />
-                </button>
-              </span>
-            ))}
+          <div className="mb-2 flex items-center justify-between rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] px-3 py-1.5 text-[10px] text-[var(--faint)]">
+            <span>已攒 {pending.length} 条，点发送一起发（AI 只回一条）</span>
+            <button className="text-[var(--accent-strong)]" onClick={() => setPending([])}>
+              清空
+            </button>
           </div>
         ) : null}
 
