@@ -19,6 +19,9 @@ function formatChatTime(timestamp: number | null): string {
 function preview(chat: ChatPublic): string {
   if (!chat.lastMessage) return '还没有消息';
   if (chat.lastMessageKind === 'image') return '[图片]';
+  if (chat.lastMessageKind === 'desc-image') return '[图片]';
+  if (chat.lastMessageKind === 'voice') return '[语音]';
+  if (chat.lastMessageKind === 'red-packet') return '[红包]';
   const text = chat.lastMessage
     .replace(/```[\s\S]*?```/g, '[代码]')
     .replace(/[*_`#>]/g, '')

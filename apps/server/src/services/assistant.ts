@@ -31,9 +31,18 @@ const STICKER_LINE = /^\s*\[(?:表情|sticker)\s*[:：]\s*(.+?)\]\s*$/i;
 type ReplyPart =
   | { type: 'text'; content: string }
   | { type: 'sticker'; url: string }
-  | { type: 'descImage'; content: string };
+  | { type: 'descImage'; content: string }
+  | { type: 'voice'; content: string; seconds: number }
+  | { type: 'packet'; content: string; amount: number };
 
 const IMAGE_LINE = /^\s*\[(?:图片|图像|照片|image)\s*[:：]\s*(.+?)\]\s*$/i;
+const VOICE_LINE = /^\s*\[(?:语音|voice)\s*[:：]\s*(.*?)\]\s*$/i;
+const PACKET_LINE = /^\s*\[(?:红包|red-?packet)\s*[:：]\s*(.+?)\]\s*$/i;
+
+/** 没有真音频，按字数估个时长（中文大概 4 字/秒） */
+function estimateSeconds(text: string): number {
+  return Math.max(1, Math.min(60, Math.round(text.length / 4) || 1));
+}
 
 /**
  * 模型看不到真图片，用文字替身：
@@ -71,6 +80,25 @@ function parseReply(raw: string, stickers: StickerPublic[]): ReplyPart[] {
       parts.push({ type: 'descImage', content: imageMatch[1]?.trim() ?? '' });
       continue;
     }
+    const voiceMatch = VOICE_LINE.exec(line);
+    if (voiceMatch) {
+      const said = voiceMatch[1]?.trim() ?? '';
+      flush();
+      parts.push({ type: 'voice', content: said, seconds: estimateSeconds(said) });
+      continue;
+    }
+    const packetMatch = PACKET_LINE.exec(line);
+    if (packetMatch) {
+      const raw = packetMatch[1]?.trim() ?? '';
+      const amountMatch = /^(\d+(?:\.\d+)?)\s*(.*)$/.exec(raw);
+      flush();
+      parts.push({
+        type: 'packet',
+        amount: amountMatch ? Number(amountMatch[1]) : 0,
+        content: amountMatch ? (amountMatch[2] ?? '').trim() : raw,
+      });
+      continue;
+    }
     buffer.push(line);
   }
   flush();
@@ -84,7 +112,10 @@ function parseReply(raw: string, stickers: StickerPublic[]): ReplyPart[] {
       continue;
     }
     const content = part.content
-      .replace(/\[(?:表情|sticker|图片|图像|照片|image)\s*[:：][^\]]*\]/gi, '')
+      .replace(
+        /\[(?:表情|sticker|图片|图像|照片|image|语音|voice|红包|red-?packet)\s*[:：][^\]]*\]/gi,
+        '',
+      )
       .trim();
     if (content) cleaned.push({ type: 'text', content });
   }
@@ -279,15 +310,35 @@ export async function streamAssistantReply(options: {
     // 同一毫秒插入的多条消息要保证顺序，按解析出来的先后各留 1ms
     let stamp = Date.now();
     for (const part of parts) {
-      const kind = part.type === 'text' ? 'text' : part.type === 'sticker' ? 'image' : 'desc-image';
+      const kind =
+        part.type === 'text'
+          ? 'text'
+          : part.type === 'sticker'
+            ? 'image'
+            : part.type === 'voice'
+              ? 'voice'
+              : part.type === 'packet'
+                ? 'red-packet'
+                : 'desc-image';
       const body =
-        part.type === 'text' ? part.content : part.type === 'sticker' ? part.url : part.content;
+        part.type === 'text'
+          ? part.content
+          : part.type === 'sticker'
+            ? part.url
+            : part.content;
+      const meta =
+        part.type === 'voice'
+          ? { durationSeconds: part.seconds }
+          : part.type === 'packet'
+            ? { amount: part.amount }
+            : undefined;
       const message = insertMessage({
         chatId,
         role: 'assistant',
         senderId: character.id,
         kind,
         content: body,
+        meta,
         createdAt: stamp,
       });
       stamp += 1;

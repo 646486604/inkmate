@@ -50,6 +50,16 @@ function messageTextForPrompt(message: MessagePublic): string {
       typeof message.meta?.description === 'string' ? message.meta.description.trim() : '';
     return desc ? `[图片：${desc}]` : '[图片]';
   }
+  if (message.kind === 'voice') {
+    const seconds =
+      typeof message.meta?.durationSeconds === 'number' ? message.meta.durationSeconds : 0;
+    return `[语音${seconds ? ` ${seconds} 秒` : ''}：${message.content.trim()}]`;
+  }
+  if (message.kind === 'red-packet') {
+    const amount = typeof message.meta?.amount === 'number' ? message.meta.amount : 0;
+    const note = message.content.trim();
+    return `[红包${amount ? ` ${amount} 元` : ''}${note ? `：${note}` : ''}]`;
+  }
   return message.content.trim();
 }
 
@@ -176,6 +186,7 @@ export function buildChatMessages(options: {
       ? `- 想发表情包时，单独一行写 [表情:描述]（这一行不要带别的字）。可用：${stickerText}。`
       : '',
     '- 想给对方看某个画面/照片时，单独一行写 [图片:具体描述]，比如 [图片:窗外的雨]；会显示成一张“文字图”。',
+    '- 想发语音时单独一行写 [语音:说的话]；想发红包时单独一行写 [红包:金额 祝福语]（如 [红包:6.66 恭喜发财]）。这些都是文字演的，不会真扣钱。',
     '- 记得你们之前聊过什么，接得上就接；不知道的事不要编。',
     '- 你的计划只影响状态和语气；不要主动念计划，也不要解释“我刚从计划里看到”。计划可能没照做，可以自然地推迟或改变。',
     '',

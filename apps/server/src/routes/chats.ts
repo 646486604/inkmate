@@ -140,13 +140,18 @@ const chatRoutes: FastifyPluginAsync = async (app) => {
     const input = sendMessageSchema.parse(req.body);
     resolveAssistantTarget({ chatId: id, userText: input.content });
 
+    const meta: Record<string, unknown> = {};
+    if (input.description) meta.description = input.description;
+    if (input.durationSeconds !== undefined) meta.durationSeconds = input.durationSeconds;
+    if (input.amount !== undefined) meta.amount = input.amount;
+
     const userMessage = insertMessage({
       chatId: id,
       role: 'user',
       senderId: req.user.id,
       kind: input.kind,
       content: input.content,
-      meta: input.description ? { description: input.description } : undefined,
+      meta: Object.keys(meta).length > 0 ? meta : undefined,
     });
     touchChat(id, 0);
     markChatRead(id);

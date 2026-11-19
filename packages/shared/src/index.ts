@@ -229,9 +229,16 @@ export const STICKER_MAX_BYTES = 2 * 1024 * 1024;
 
 export const sendMessageSchema = z.object({
   content: z.string().trim().min(1, '消息不能为空').max(8000),
-  kind: z.enum(['text', 'image']).optional().default('text'),
+  kind: z
+    .enum(['text', 'image', 'voice', 'red-packet'])
+    .optional()
+    .default('text'),
   /** 图片的一句话描述：模型看不到图，只能靠它“看到” */
   description: z.string().trim().max(200, '描述最多 200 个字').optional(),
+  /** 假语音的时长（秒） */
+  durationSeconds: z.number().int().min(1).max(120).optional(),
+  /** 假红包的金额（元） */
+  amount: z.number().min(0).max(100000).optional(),
 });
 export type SendMessageInput = z.infer<typeof sendMessageSchema>;
 
@@ -266,7 +273,7 @@ export const regenerateSchema = z.object({
 export type RegenerateInput = z.infer<typeof regenerateSchema>;
 
 export type MessageRole = 'user' | 'assistant' | 'system';
-export type MessageKind = 'text' | 'image' | 'desc-image' | 'system';
+export type MessageKind = 'text' | 'image' | 'desc-image' | 'voice' | 'red-packet' | 'system';
 
 export interface MessagePublic {
   id: string;

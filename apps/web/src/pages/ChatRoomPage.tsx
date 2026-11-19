@@ -12,8 +12,11 @@ import {
   ArrowUp,
   Brain,
   CalendarDays,
+  Gift,
   ImagePlus,
+  ListPlus,
   Loader2,
+  Mic,
   MoreHorizontal,
   Music2,
   Pause,
@@ -27,6 +30,7 @@ import {
   Trash2,
   UserRound,
   Users,
+  Volume2,
   X,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
@@ -125,7 +129,7 @@ export function ChatRoomPage() {
   const [sending, setSending] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
-  const [stickerTab, setStickerTab] = useState<'emoji' | 'sticker'>('emoji');
+  const [stickerTab, setStickerTab] = useState<'emoji' | 'sticker' | 'more'>('emoji');
   const [stickers, setStickers] = useState<StickerPublic[]>([]);
   const [stickerBusy, setStickerBusy] = useState(false);
   const [identityOpen, setIdentityOpen] = useState(false);
@@ -334,6 +338,84 @@ export function ChatRoomPage() {
   function queueSticker(url: string) {
     setPending((current) =>
       [...current, { kind: 'image' as const, value: url }].slice(0, 10),
+    );
+  }
+
+  async function sendSpecial(
+    body: {
+      kind: 'voice' | 'red-packet';
+      content: string;
+      durationSeconds?: number;
+      amount?: number;
+    },
+    failMessage: string,
+  ) {
+    if (!id || sending) return;
+    setError('');
+    const controller = beginStream();
+    try {
+      await streamAssistant(
+        `/api/chats/${id}/messages`,
+        body,
+        {
+          onStart: (data) => {
+            const inserted = data.userMessages ?? (data.userMessage ? [data.userMessage] : []);
+            if (inserted.length > 0) {
+              setMessages((current) =>
+                inserted.reduce((acc, message) => upsert(acc, message), current),
+              );
+            }
+            setStreamingSpeaker(data.speaker ?? null);
+            setStreaming({ text: '', createdAt: data.createdAt });
+          },
+          onDelta: (text) =>
+            setStreaming((current) =>
+              current ? { ...current, text: current.text + text } : current,
+            ),
+          onMessage: (message) => setMessages((current) => upsert(current, message)),
+          onDone: (data) => {
+            setMessages((current) => upsert(current, data.message));
+            if (data.error) setError(data.error);
+            finishStream();
+          },
+          onError: (message) => {
+            setError(message);
+            finishStream();
+            void refreshMessages();
+          },
+        },
+        controller.signal,
+      );
+    } catch (err) {
+      if (!controller.signal.aborted) {
+        setError(err instanceof ApiError ? err.message : failMessage);
+      }
+      finishStream();
+    }
+  }
+
+  function sendVoice() {
+    const text = window.prompt('语音里说什么？（会显示成一条假语音，不会录音）', '');
+    if (text === null) return;
+    const content = text.trim() || '（语音）';
+    const durationSeconds = Math.max(1, Math.min(60, Math.round(content.length / 4) || 1));
+    setEmojiOpen(false);
+    void sendSpecial({ kind: 'voice', content, durationSeconds }, '发送语音失败');
+  }
+
+  function sendRedPacket() {
+    const raw = window.prompt('红包金额（元）', '6.66');
+    if (raw === null) return;
+    const amount = Number(raw);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setError('红包金额不对');
+      return;
+    }
+    const note = window.prompt('红包留言（可留空）', '恭喜发财');
+    setEmojiOpen(false);
+    void sendSpecial(
+      { kind: 'red-packet', content: (note ?? '').trim() || '恭喜发财', amount },
+      '发红包失败',
     );
   }
 
@@ -843,6 +925,12 @@ export function ChatRoomPage() {
                 message.createdAt - previous.createdAt < 2 * 60 * 1000,
             );
             const isAction = actionId === message.id;
+            const voiceSeconds =
+              typeof message.meta?.durationSeconds === 'number'
+                ? message.meta.durationSeconds
+                : 0;
+            const packetAmount =
+              typeof message.meta?.amount === 'number' ? message.meta.amount : 0;
             const member = !mine
               ? chat?.members.find((item) => item.characterId === message.senderId) ?? null
               : null;
@@ -881,7 +969,34 @@ export function ChatRoomPage() {
                     {isGroup && !mine ? (
                       <p className="mb-0.5 ml-0.5 text-[9px] text-[var(--faint)]">{speakerName}</p>
                     ) : null}
-                    {message.kind === 'desc-image' ? (
+                    {message.kind === 'voice' ? (
+                      <div className={`relative ${grouped ? BUBBLE_OTHER_FLAT : BUBBLE_OTHER}`}>
+                        <div className="flex items-center gap-2 text-[13px]">
+                          <Volume2 size={14} className="shrink-0 opacity-80" />
+                          <span className="tabular">{voiceSeconds || 1}″</span>
+                        </div>
+                        {message.content ? (
+                          <span className="mt-1 block text-[10px] leading-relaxed opacity-70">
+                            {message.content}
+                          </span>
+                        ) : null}
+                        <span className="mt-0.5 block text-[8px] opacity-50">文字演的语音</span>
+                      </div>
+                    ) : message.kind === 'red-packet' ? (
+                      <div className="w-44 rounded-xl bg-[#c94a3d] px-3 py-2.5 text-[#fff3e6]">
+                        <div className="flex items-center gap-1.5 text-[11px] font-medium">
+                          <Gift size={13} />
+                          红包
+                        </div>
+                        <p className="mt-1 text-[17px] font-medium tabular">
+                          ¥{packetAmount || 0}
+                        </p>
+                        <p className="mt-0.5 text-[10px] leading-relaxed opacity-85">
+                          {message.content || '恭喜发财'}
+                        </p>
+                        <p className="mt-1 text-[8px] opacity-60">假装拆开 · 不会真有钱</p>
+                      </div>
+                    ) : message.kind === 'desc-image' ? (
                       <div
                         className={`relative ${
                           mine
@@ -1122,6 +1237,7 @@ export function ChatRoomPage() {
                   [
                     ['emoji', '表情'],
                     ['sticker', `表情包 ${stickers.length ? stickers.length : ''}`.trim()],
+                    ['more', '更多'],
                   ] as const
                 ).map(([value, label]) => (
                   <button
@@ -1172,6 +1288,32 @@ export function ChatRoomPage() {
                     {emoji}
                   </button>
                 ))}
+              </div>
+            ) : stickerTab === 'more' ? (
+              <div className="grid grid-cols-3 gap-2">
+                {(
+                  [
+                    { label: '图片', icon: ImagePlus, onClick: () => fileRef.current?.click() },
+                    { label: '语音', icon: Mic, onClick: sendVoice },
+                    { label: '红包', icon: Gift, onClick: sendRedPacket },
+                  ] as const
+                ).map((action) => {
+                  const Icon = action.icon;
+                  return (
+                    <button
+                      key={action.label}
+                      className="flex flex-col items-center gap-1.5 rounded-xl border border-[var(--line)] py-3 text-[10px] text-[var(--muted)] hover:bg-[var(--accent-soft)]"
+                      onClick={action.onClick}
+                      disabled={uploading || sending}
+                    >
+                      <Icon size={20} />
+                      {action.label}
+                    </button>
+                  );
+                })}
+                <p className="col-span-3 pt-1 text-center text-[9px] leading-relaxed text-[var(--faint)]">
+                  语音和红包都是文字演的，不会真录音、也不会真扣钱
+                </p>
               </div>
             ) : stickers.length === 0 ? (
               <p className="py-4 text-center text-[10px] leading-relaxed text-[var(--faint)]">
@@ -1227,29 +1369,22 @@ export function ChatRoomPage() {
           </div>
         ) : null}
 
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/gif,image/avif"
+          className="hidden"
+          onChange={handleFile}
+        />
+
         <div className="flex items-end gap-2">
           <button
             className="btn btn-quiet h-9 min-h-9 px-2"
             onClick={() => setEmojiOpen((open) => !open)}
-            aria-label="表情"
+            aria-label="更多"
           >
-            <Smile size={19} />
+            <Plus size={19} className={`transition ${emojiOpen ? 'rotate-45' : ''}`} />
           </button>
-          <button
-            className="btn btn-quiet h-9 min-h-9 px-2"
-            onClick={() => fileRef.current?.click()}
-            disabled={uploading || sending}
-            aria-label="图片"
-          >
-            {uploading ? <Loader2 size={18} className="animate-spin" /> : <ImagePlus size={18} />}
-          </button>
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/png,image/jpeg,image/webp,image/gif,image/avif"
-            className="hidden"
-            onChange={handleFile}
-          />
           <textarea
             ref={inputRef}
             className="field composer-field max-h-32 min-h-[38px] flex-1 resize-none py-2 text-[13px]"
@@ -1267,7 +1402,7 @@ export function ChatRoomPage() {
             title="先攒着，稍后几条一起发"
             aria-label="攒一条"
           >
-            <Plus size={18} />
+            <ListPlus size={18} />
           </button>
           {sending ? (
             <button className="btn btn-ghost h-9 min-h-9 px-3" onClick={stop} aria-label="停止">
