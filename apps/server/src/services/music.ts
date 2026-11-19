@@ -1,23 +1,113 @@
-import type { CharacterPublic, MusicCommentPublic, MusicTrack } from '@inkmate/shared';
+import type {
+  CharacterPublic,
+  MusicCommentPublic,
+  MusicTrack,
+  NeteaseAccountPublic,
+} from '@inkmate/shared';
+import { createHash } from 'node:crypto';
 import { getCharacter } from '../db/characters.js';
 import { getPrimaryUser } from '../db/users.js';
 import { listTracks } from '../db/music.js';
 import { addMusicComment } from '../db/music.js';
 import { getPrivateChatForCharacter } from '../db/chats.js';
 import { getMemory } from '../db/memory.js';
+import { getSetting, setSetting } from '../db/settings.js';
 import { neteaseApiUrl } from '../env.js';
+import { decryptSecret, encryptSecret } from '../lib/crypto.js';
 import { HttpError } from '../lib/http-error.js';
 import { completeChat } from '../llm/complete.js';
 import { resolveProviderForCharacter } from '../llm/resolve.js';
 import { getScheduleContext } from './schedule.js';
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) InkMate/0.1';
+const NETEASE_COOKIE_KEY = 'netease_cookie_enc';
 
-async function neteaseGet(path: string): Promise<Record<string, unknown>> {
+function readStoredCookie(): string {
+  const stored = getSetting<unknown>(NETEASE_COOKIE_KEY, '');
+  if (typeof stored !== 'string' || !stored) return '';
+  try {
+    return decryptSecret(stored).trim();
+  } catch {
+    return '';
+  }
+}
+
+/** 数据目录里的 Cookie 优先；没存过才用环境变量，方便无 UI 的部署。 */
+export function getNeteaseCookie(): string {
+  return readStoredCookie() || (process.env.NETEASE_COOKIE ?? '').trim();
+}
+
+export function getNeteaseCookieSource(): 'stored' | 'env' | null {
+  if (readStoredCookie()) return 'stored';
+  if ((process.env.NETEASE_COOKIE ?? '').trim()) return 'env';
+  return null;
+}
+
+/** 接受整条 Cookie、带 "Cookie:" 前缀、带换行/引号的粘贴；至少要有 MUSIC_U。 */
+export function normalizeNeteaseCookie(input: string): string {
+  let value = input.trim();
+  if (!value) throw new HttpError(400, 'Cookie 是空的');
+  value = value.replace(/^cookie\s*:\s*/i, '');
+  value = value.replace(/[\r\n\t]+/g, ' ');
+  value = value.replace(/^["'`]+|["'`]+$/g, '').trim();
+  // 从某些文档/URL 复制过来时是整条 encodeURIComponent 过的
+  if (!value.includes('=') && /%3D/i.test(value)) {
+    try {
+      value = decodeURIComponent(value);
+    } catch {
+      // 解不开就按原样继续，下面会报缺少 MUSIC_U
+    }
+  }
+
+  const pairs = new Map<string, string>();
+  for (const chunk of value.split(';')) {
+    const part = chunk.trim();
+    if (!part) continue;
+    const index = part.indexOf('=');
+    if (index <= 0) continue;
+    const key = part.slice(0, index).trim();
+    const val = part.slice(index + 1).trim();
+    if (!key || !val) continue;
+    pairs.set(key, val);
+  }
+
+  if (!pairs.has('MUSIC_U')) {
+    throw new HttpError(400, '没有找到 MUSIC_U，确认复制的是 music.163.com 的完整 Cookie');
+  }
+  if ((pairs.get('MUSIC_U') ?? '').length < 10) {
+    throw new HttpError(400, 'MUSIC_U 看起来不完整，重新复制整条 Cookie');
+  }
+  return [...pairs.entries()].map(([key, val]) => `${key}=${val}`).join('; ');
+}
+
+export function saveNeteaseCookie(cookie: string): void {
+  setSetting(NETEASE_COOKIE_KEY, encryptSecret(cookie));
+}
+
+export function clearNeteaseCookie(): void {
+  setSetting(NETEASE_COOKIE_KEY, '');
+}
+
+async function neteaseGet(
+  path: string,
+  cookieOverride?: string,
+): Promise<Record<string, unknown>> {
+  const cookie = cookieOverride ?? getNeteaseCookie();
+  // Cookie 放在请求头里，不放进 URL：边车会记录 req.originalUrl，query 里的 Cookie 会明文落日志。
+  // `_ink` 是 Cookie 的短哈希，只用于把边车 2 分钟 URL 缓存按账号隔开。
+  const tag = cookie ? createHash('sha1').update(cookie).digest('hex').slice(0, 12) : 'anon';
+  const separator = path.includes('?') ? '&' : '?';
+  const target = `${path}${separator}_ink=${tag}`;
+  const headers: Record<string, string> = {
+    'User-Agent': UA,
+    Accept: 'application/json',
+  };
+  if (cookie) headers.Cookie = cookie;
+
   let response: Response;
   try {
-    response = await fetch(`${neteaseApiUrl}${path}`, {
-      headers: { 'User-Agent': UA, Accept: 'application/json' },
+    response = await fetch(`${neteaseApiUrl}${target}`, {
+      headers,
       signal: AbortSignal.timeout(15_000),
     });
   } catch {
@@ -31,7 +121,55 @@ async function neteaseGet(path: string): Promise<Record<string, unknown>> {
   }
   const data = (await response.json().catch(() => null)) as Record<string, unknown> | null;
   if (!data) throw new HttpError(502, '网易云边车返回了非 JSON 内容');
+
+  // 边车把网易云的业务错误也放在 200 里，这里显式区分，避免“看起来加载成功但没歌”。
+  const code = typeof data.code === 'number' ? data.code : null;
+  if (code === 460) {
+    throw new HttpError(429, '网易云触发了风控，先歇十分钟再听；本地曲库不受影响。');
+  }
+  if (code === 301) {
+    throw new HttpError(401, '网易云登录失效或未登录，请重新粘贴 Cookie。');
+  }
+
   return data;
+}
+
+interface NeteaseProfile {
+  userId?: number;
+  nickname?: string;
+  vipType?: number;
+}
+
+export async function getNeteaseAccount(
+  cookie = getNeteaseCookie(),
+): Promise<NeteaseAccountPublic> {
+  if (!cookie) return { configured: false };
+  const data = await neteaseGet('/user/account', cookie);
+  const profile = data.profile as NeteaseProfile | null | undefined;
+  if (!profile) {
+    throw new HttpError(401, '网易云 Cookie 无效或已过期，请重新复制');
+  }
+  return {
+    configured: true,
+    nickname: profile.nickname ?? '',
+    userId: profile.userId,
+    vipType: profile.vipType ?? 0,
+    source: getNeteaseCookieSource() ?? undefined,
+  };
+}
+
+export async function checkNeteaseAccount(): Promise<NeteaseAccountPublic> {
+  const cookie = getNeteaseCookie();
+  if (!cookie) return { configured: false };
+  try {
+    return await getNeteaseAccount(cookie);
+  } catch (error) {
+    return {
+      configured: true,
+      source: getNeteaseCookieSource() ?? undefined,
+      error: error instanceof HttpError ? error.message : '检查网易云账号失败',
+    };
+  }
 }
 
 interface NeteaseSong {

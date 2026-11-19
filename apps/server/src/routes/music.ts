@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import type { FastifyPluginAsync } from 'fastify';
+import { z } from 'zod';
 import { musicCommentInputSchema, type MusicSession } from '@inkmate/shared';
 import { requireAuth } from '../auth/session.js';
 import { musicDir } from '../env.js';
@@ -20,14 +21,25 @@ import {
 } from '../db/music.js';
 import { HttpError } from '../lib/http-error.js';
 import {
+  checkNeteaseAccount,
+  clearNeteaseCookie,
   generateMusicComment,
+  getNeteaseAccount,
+  getNeteaseCookie,
+  getNeteaseCookieSource,
   getNeteaseDaily,
   getNeteaseLyrics,
   getNeteasePlaylist,
+  normalizeNeteaseCookie,
   pickLocalTrack,
   proxyNeteaseStream,
+  saveNeteaseCookie,
   searchNetease,
 } from '../services/music.js';
+
+const neteaseCookieSchema = z.object({
+  cookie: z.string().trim().min(1, 'Cookie 是空的').max(8000, 'Cookie 太长，确认只复制了 Cookie'),
+});
 
 const AUDIO_EXT: Record<string, string> = {
   'audio/mpeg': '.mp3',
@@ -154,6 +166,26 @@ const musicRoutes: FastifyPluginAsync = async (app) => {
   app.get('/netease/lyrics/:id', async (req) => {
     const { id } = req.params as { id: string };
     return { lyrics: await getNeteaseLyrics(id) };
+  });
+
+  // 网易云账号：只返回昵称/VIP 状态，永远不回传 Cookie 本身
+  app.get('/netease/account', async () => ({ account: await checkNeteaseAccount() }));
+
+  app.put('/netease/cookie', async (req) => {
+    const input = neteaseCookieSchema.parse(req.body);
+    const cookie = normalizeNeteaseCookie(input.cookie);
+    const account = await getNeteaseAccount(cookie); // 验证通过才保存
+    saveNeteaseCookie(cookie);
+    return { account: { ...account, configured: true, source: 'stored' as const } };
+  });
+
+  app.delete('/netease/cookie', async () => {
+    clearNeteaseCookie();
+    return {
+      account: getNeteaseCookie()
+        ? { configured: true, source: getNeteaseCookieSource() ?? undefined }
+        : { configured: false },
+    };
   });
 
   app.get('/netease/daily', async () => ({ tracks: await getNeteaseDaily() }));

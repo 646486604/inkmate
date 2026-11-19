@@ -72,7 +72,8 @@ bash scripts/termux-start.sh              # 后台起服务 + 等就绪 + 直接
 
 边车依赖装在 `tools/netease-api`（固定 `NeteaseCloudMusicApi@4.34.1`，独立 `node_modules`）。不想用网易云、
 只用本地曲库时，启动前设 `INKMATE_NO_NETEASE=1`；边车日志在 `~/inkmate-netease.log`。
-边车是匿名状态：能搜、能播免费/未下架曲目，VIP 和下架歌仍会提示不可播。
+边车默认匿名：只能播免费/未下架曲目。在「一起听 → 网易云 → 填 Cookie」里粘贴 `MUSIC_U` 后，
+VIP 曲目和每日推荐就能用；Cookie 加密保存在手机本地，不需要每次重填。
 
 > 这里的「打开墨伴」指运行 `termux-start.sh`（或给它建的主屏快捷方式），不是只点 PWA 图标——
 > PWA 只是前端壳，后台的墨伴服务和边车还是得由 Termux 拉起来。
@@ -148,6 +149,7 @@ chmod +x ~/.termux/boot/inkmate.sh
 - 动态支持多图、作者信息、相对时间、SSE 实时更新
 - 一起听：网易云边车搜索、音频代理（支持 Range）、歌词、播放器、进度/音量/上一首/下一首
 - 网易云歌单导入（ID/链接）、每日推荐、我的收藏
+- 网易云账号 Cookie（MUSIC_U）：加密保存在本机，用于 VIP 曲目与每日推荐；不自动登录、不回传浏览器
 - 播放模式：顺序 / 列表循环 / 单曲循环 / 随机
 - 全局迷你播放条：切到消息/动态/我的也能继续听；聊天页顶部有紧凑播放条
 - 多标签页通过 BroadcastChannel 同步播放/暂停/切歌/进度
@@ -204,9 +206,25 @@ APP_SECRET=<32+ 字节随机串，可选>
 COOKIE_SECURE=true   # 只有上 HTTPS 时才开
 TZ=Asia/Shanghai
 NETEASE_API_URL=http://127.0.0.1:3000
+NETEASE_COOKIE=     # 可选：MUSIC_U=...; __csrf=...，也可在「一起听」界面里填
 ```
 
 网易云需要本机边车（[NeteaseCloudMusicApi](https://github.com/Binaryify/NeteaseCloudMusicApi)），默认地址 `127.0.0.1:3000`。没启动也能用本地曲库。
+
+### 网易云账号（VIP / 每日推荐）
+
+打开「一起听」→「网易云」→「填 Cookie」，把浏览器里 `music.163.com` 的整条 Cookie 粘进去，
+点「保存并验证」。验证通过后：
+
+- VIP / 付费曲目会走 `song/url/v1` 返回可播地址；
+- 每日推荐会变成你自己账号的推荐；
+- Cookie 存在 SQLite 的 `settings` 表里，用 `data/.app-secret` 加密，接口只返回昵称/VIP 状态，不回传 Cookie。
+
+取 Cookie：浏览器登录 `music.163.com` → 开发者工具 → Network → 随便点一个发往 `music.163.com` 的请求
+→ 请求头里的 `Cookie:` 整条复制。至少要有 `MUSIC_U=...`；只存 `MUSIC_U` 通常也能听歌，但推荐/写操作可能需要完整 Cookie。
+
+无 UI 的部署也可以用环境变量 `NETEASE_COOKIE="MUSIC_U=...; __csrf=..."`；数据目录里保存的 Cookie 优先。
+Cookie 失效时播放会提示重新粘贴；不会自动清空，也不会自动重新登录。
 
 ## 已知边界
 
@@ -214,7 +232,7 @@ NETEASE_API_URL=http://127.0.0.1:3000
 - 动态自动发帖只在服务进程运行时工作；每天条数由角色的「允许发动态 / 每天几条」控制。
 - 目前没有角色之间的互相点赞/评论，只有角色对用户动态的互动。
 - 一起听的多标签同步基于 BroadcastChannel，只覆盖同一浏览器；跨设备不实时同步。
-- 网易云依赖本机边车；VIP/下架曲目会在播放器里提示无法播放；每日推荐需要边车已登录。
+- 网易云依赖本机边车；未登录时 VIP/下架曲目无法播放、每日推荐可能为空。已支持粘贴 `MUSIC_U` Cookie（加密保存），扫码登录还没做。
 - AI 短评暂不写入聊天记忆；每首上限 4 条。
 - 主动消息只在服务进程运行时工作；电脑关机/休眠时不会发。
 - Web Push 已接入，但手机通过局域网 IP 走 HTTP 时不能订阅；需要 localhost 或 HTTPS。

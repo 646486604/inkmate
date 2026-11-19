@@ -420,6 +420,15 @@ export interface MusicTrack {
   lyrics?: string;
 }
 
+export interface NeteaseAccountPublic {
+  configured: boolean;
+  nickname?: string;
+  userId?: number;
+  vipType?: number;
+  source?: 'stored' | 'env';
+  error?: string;
+}
+
 export interface MusicSession {
   queue: MusicTrack[];
   index: number;

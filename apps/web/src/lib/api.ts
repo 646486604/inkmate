@@ -19,6 +19,7 @@ import type {
   MusicCommentPublic,
   MusicSession,
   MusicTrack,
+  NeteaseAccountPublic,
   ProfilePatch,
   ProviderInput,
   ProviderModelsInput,
@@ -343,6 +344,18 @@ export const api = {
     request<{ tracks: MusicTrack[] }>(`/api/music/netease/playlist/${encodeURIComponent(id)}`),
   neteaseLyrics: (id: string) =>
     request<{ lyrics: string }>(`/api/music/netease/lyrics/${id}`),
+  neteaseAccount: () =>
+    request<{ account: NeteaseAccountPublic }>('/api/music/netease/account'),
+  saveNeteaseCookie: (cookie: string) =>
+    request<{ account: NeteaseAccountPublic }>('/api/music/netease/cookie', {
+      method: 'PUT',
+      body: JSON.stringify({ cookie }),
+      timeoutMs: 20_000,
+    }),
+  clearNeteaseCookie: () =>
+    request<{ account: NeteaseAccountPublic }>('/api/music/netease/cookie', {
+      method: 'DELETE',
+    }),
   musicSession: () => request<{ session: MusicSession }>('/api/music/session'),
   saveMusicSession: (session: Partial<MusicSession>) =>
     request<{ session: MusicSession }>('/api/music/session', {

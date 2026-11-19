@@ -2,8 +2,10 @@ import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import {
   Disc3,
   Heart,
+  KeyRound,
   ListMusic,
   Loader2,
+  LogOut,
   Music2,
   Pause,
   Play,
@@ -21,6 +23,7 @@ import type {
   CharacterPublic,
   MusicCommentPublic,
   MusicTrack,
+  NeteaseAccountPublic,
 } from '@inkmate/shared';
 import { api, ApiError } from '../lib/api';
 import { useMusicPlayer } from '../lib/music-player';
@@ -104,6 +107,11 @@ export function MusicPage() {
   const [upload, setUpload] = useState({ title: '', artist: '', lyrics: '' });
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(true);
+  const [account, setAccount] = useState<NeteaseAccountPublic | null>(null);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const [cookieInput, setCookieInput] = useState('');
+  const [savingCookie, setSavingCookie] = useState(false);
+  const [accountError, setAccountError] = useState('');
 
   useEffect(() => {
     let alive = true;
@@ -121,6 +129,21 @@ export function MusicPage() {
       })
       .finally(() => {
         if (alive) setLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    api
+      .neteaseAccount()
+      .then((result) => {
+        if (alive) setAccount(result.account);
+      })
+      .catch(() => {
+        if (alive) setAccount({ configured: false });
       });
     return () => {
       alive = false;
@@ -295,6 +318,33 @@ export function MusicPage() {
       );
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '收藏失败');
+    }
+  }
+
+  async function saveCookie() {
+    if (!cookieInput.trim() || savingCookie) return;
+    setSavingCookie(true);
+    setAccountError('');
+    try {
+      const result = await api.saveNeteaseCookie(cookieInput);
+      setAccount(result.account);
+      setCookieInput('');
+      setAccountOpen(false);
+    } catch (err) {
+      setAccountError(err instanceof ApiError ? err.message : '保存失败');
+    } finally {
+      setSavingCookie(false);
+    }
+  }
+
+  async function logoutNetease() {
+    setAccountError('');
+    try {
+      const result = await api.clearNeteaseCookie();
+      setAccount(result.account);
+      setAccountOpen(false);
+    } catch (err) {
+      setAccountError(err instanceof ApiError ? err.message : '退出失败');
     }
   }
 
@@ -535,6 +585,82 @@ export function MusicPage() {
         </section>
       ) : tab === 'search' ? (
         <section className="card p-4">
+          <div className="mb-3 rounded-xl border border-[var(--line)] px-3 py-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="flex items-center gap-1 text-[10px] text-[var(--muted)]">
+                  <KeyRound size={11} />
+                  网易云账号
+                </p>
+                <p className="mt-0.5 truncate text-[11px]">
+                  {account?.configured
+                    ? account.nickname
+                      ? `已登录：${account.nickname}${account.vipType ? ' · VIP' : ''}`
+                      : account.source === 'env'
+                        ? '已由环境变量提供'
+                        : '已保存 Cookie'
+                    : '匿名 · VIP 歌无法播放'}
+                </p>
+                {account?.error ? (
+                  <p className="mt-0.5 text-[9px] text-[var(--accent-strong)]">{account.error}</p>
+                ) : null}
+              </div>
+              <button
+                className="btn btn-quiet h-7 min-h-7 shrink-0 px-2 text-[10px]"
+                onClick={() => {
+                  setAccountOpen((open) => !open);
+                  setAccountError('');
+                }}
+              >
+                {accountOpen ? '收起' : account?.configured ? '更换' : '填 Cookie'}
+              </button>
+            </div>
+
+            {accountOpen ? (
+              <div className="mt-2 space-y-2">
+                <textarea
+                  className="field min-h-[70px] text-[10px]"
+                  value={cookieInput}
+                  onChange={(event) => setCookieInput(event.target.value)}
+                  placeholder="粘贴 music.163.com 的整条 Cookie（至少要包含 MUSIC_U=...）"
+                  spellCheck={false}
+                />
+                <div className="flex gap-2">
+                  <button
+                    className="btn btn-accent h-8 min-h-8 flex-1 text-[10px]"
+                    disabled={savingCookie || !cookieInput.trim()}
+                    onClick={() => void saveCookie()}
+                  >
+                    {savingCookie ? (
+                      <Loader2 size={12} className="animate-spin" />
+                    ) : (
+                      <KeyRound size={12} />
+                    )}
+                    <span className="ml-1">保存并验证</span>
+                  </button>
+                  {account?.configured ? (
+                    <button
+                      className="btn btn-ghost h-8 min-h-8 px-2 text-[10px]"
+                      onClick={() => void logoutNetease()}
+                    >
+                      <LogOut size={12} />
+                      <span className="ml-1">退出</span>
+                    </button>
+                  ) : null}
+                </div>
+                <p className="text-[9px] leading-relaxed text-[var(--faint)]">
+                  在浏览器登录 music.163.com（手机/电脑都行）→ 开发者工具 → Network → 任意请求 →
+                  复制请求头里的 Cookie 整条。Cookie 加密保存在本机，不会回传给浏览器。
+                </p>
+                {accountError ? (
+                  <p className="text-[9px] leading-relaxed text-[var(--accent-strong)]">
+                    {accountError}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+
           <div className="flex gap-2">
             <input
               className="field h-9 min-h-9 flex-1 py-1 text-[11px]"
