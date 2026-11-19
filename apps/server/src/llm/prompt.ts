@@ -42,6 +42,29 @@ function formatNow(date = new Date()): string {
   return `${date.getFullYear()}年${pad(date.getMonth() + 1)}月${pad(date.getDate())}日 星期${WEEKDAYS[date.getDay()]} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+function formatGap(ms: number): string {
+  const minutes = Math.max(1, Math.round(ms / 60_000));
+  if (minutes < 60) return `${minutes} 分钟`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest > 0 ? `${hours} 小时 ${rest} 分` : `${hours} 小时`;
+}
+
+function historyStamp(timestamp: number, now: Date): string {
+  const date = new Date(timestamp);
+  const pad = (value: number) => String(value).padStart(2, '0');
+  const clock = `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  if (date.toDateString() === now.toDateString()) return clock;
+  return `${date.getMonth() + 1}月${date.getDate()}日 ${clock}`;
+}
+
+/** 给每条历史消息加时间戳；隔得久还标出间隔，避免模型以为对话是连续的 */
+function timePrefix(timestamp: number, previousTimestamp: number | undefined, now: Date): string {
+  const gap = previousTimestamp ? timestamp - previousTimestamp : 0;
+  const stamp = historyStamp(timestamp, now);
+  return gap >= 30 * 60_000 ? `[${stamp}]（距上一条 ${formatGap(gap)}）` : `[${stamp}]`;
+}
+
 /** 模型看不到真图片：图片一律用「[图片：描述]」这种文字替身表示 */
 function messageTextForPrompt(message: MessagePublic): string {
   if (message.kind === 'desc-image') return `[图片：${message.content.trim()}]`;
@@ -188,6 +211,7 @@ export function buildChatMessages(options: {
     '- 你在聊天里提到自己今天要做的事（下午开会、晚上去买东西），可以单独一行写 [日程:下午开会]，系统会记到今天的日程里；不用每条消息都写。',
     '- 想发语音时单独一行写 [语音:说的话]；想发红包时单独一行写 [红包:金额 祝福语]（如 [红包:6.66 恭喜发财]）。',
     '- 记得你们之前聊过什么，接得上就接；不知道的事不要编。',
+    '- 每条历史消息前面都带 [发送时间]，隔得久还会标「距上一条 x 小时」。隔了很久就当作时间真的过去了：可以问“你刚才在忙？”，不要停在上一个场景里接着演。',
     '- 你有自己的生活节奏，但只在聊到相关话题时顺带提一句，不要反复播报自己在干什么、几点在干什么。',
     '',
     `【现在】${formatNow(now)}。你知道现在的时间，但除非相关，不要主动评论时间。`,
@@ -196,11 +220,14 @@ export function buildChatMessages(options: {
     .join('\n');
 
   const messages: ChatMessage[] = [{ role: 'system', content: system }];
+  let previousTs: number | undefined;
   for (const message of trimHistory(history)) {
     if (message.deletedAt) continue;
     if (message.role !== 'user' && message.role !== 'assistant') continue;
-    const content = messageTextForPrompt(message);
-    if (!content) continue;
+    const raw = messageTextForPrompt(message);
+    if (!raw) continue;
+    const content = `${timePrefix(message.createdAt, previousTs, now)} ${raw}`;
+    previousTs = message.createdAt;
     messages.push({
       role: message.role,
       content: message.role === 'user' ? content : content,
@@ -298,11 +325,14 @@ export function buildGroupMessages(options: {
     .join('\n');
 
   const messages: ChatMessage[] = [{ role: 'system', content: system }];
+  let previousTs: number | undefined;
   for (const message of trimHistory(history)) {
     if (message.deletedAt) continue;
     if (message.role !== 'user' && message.role !== 'assistant') continue;
-    const content = messageTextForPrompt(message);
-    if (!content) continue;
+    const raw = messageTextForPrompt(message);
+    if (!raw) continue;
+    const content = `${timePrefix(message.createdAt, previousTs, now)} ${raw}`;
+    previousTs = message.createdAt;
     if (message.role === 'user') {
       messages.push({ role: 'user', content: `${userName}：${content}` });
       continue;
@@ -401,6 +431,7 @@ export function buildProactiveMessages(options: {
     '- 不要解释“我为什么发消息”，不要汇报计划，不要提设定。',
     '- 不要用“在吗”“最近怎么样”这种空泛开场；要带一个具体的此刻或记得的事。',
     '- 不要重复最近说过的话；不要替对方说话。',
+    '- 历史消息前有发送时间；如果距离现在很久了，别再接着上一句往下说，当作过了一段时间再开口。',
     '- 工作上的事（项目、会议、汇报、客户、数据、代码）最多当作“今天很忙/有点累”的背景，绝对不要向对方复述内容或汇报进度。',
     '- 如果此刻实在没什么可说的，只输出 <skip>。',
   ]
@@ -408,12 +439,17 @@ export function buildProactiveMessages(options: {
     .join('\n');
 
   const messages: ChatMessage[] = [{ role: 'system', content: system }];
+  let previousTs: number | undefined;
   for (const message of trimHistory(history)) {
     if (message.deletedAt) continue;
     if (message.role !== 'user' && message.role !== 'assistant') continue;
-    const content = messageTextForPrompt(message);
-    if (!content) continue;
-    messages.push({ role: message.role, content });
+    const raw = messageTextForPrompt(message);
+    if (!raw) continue;
+    messages.push({
+      role: message.role,
+      content: `${timePrefix(message.createdAt, previousTs, now)} ${raw}`,
+    });
+    previousTs = message.createdAt;
   }
   messages.push({ role: 'user', content: '（现在由你主动开口。）' });
   return messages;
