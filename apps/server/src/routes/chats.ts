@@ -176,10 +176,12 @@ const chatRoutes: FastifyPluginAsync = async (app) => {
 
     const input = sendBatchSchema.parse(req.body);
     const items: Array<{
-      kind: 'text' | 'image' | 'desc-image';
+      kind: 'text' | 'image' | 'desc-image' | 'voice' | 'red-packet';
       content: string;
       description?: string;
       sticker?: boolean;
+      durationSeconds?: number;
+      amount?: number;
     }> =
       input.items && input.items.length > 0
         ? input.items
@@ -196,6 +198,8 @@ const chatRoutes: FastifyPluginAsync = async (app) => {
       const meta: Record<string, unknown> = {};
       if (item.description) meta.description = item.description;
       if (item.sticker) meta.sticker = true;
+      if (item.durationSeconds !== undefined) meta.durationSeconds = item.durationSeconds;
+      if (item.amount !== undefined) meta.amount = item.amount;
       return insertMessage({
         chatId: id,
         role: 'user',

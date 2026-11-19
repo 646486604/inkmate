@@ -246,10 +246,15 @@ export type SendMessageInput = z.infer<typeof sendMessageSchema>;
 
 /** 攒了几条一起发：一次插入多条用户消息，再生成一条回复（文字/表情包可以混排） */
 export const sendBatchItemSchema = z.object({
-  kind: z.enum(['text', 'image', 'desc-image']).optional().default('text'),
+  kind: z
+    .enum(['text', 'image', 'desc-image', 'voice', 'red-packet'])
+    .optional()
+    .default('text'),
   content: z.string().trim().min(1, '消息不能为空').max(8000),
   description: z.string().trim().max(200, '描述最多 200 个字').optional(),
   sticker: z.boolean().optional(),
+  durationSeconds: z.number().int().min(1).max(120).optional(),
+  amount: z.number().min(0).max(100000).optional(),
 });
 export type SendBatchItem = z.infer<typeof sendBatchItemSchema>;
 
