@@ -12,6 +12,7 @@ import {
   getChatRow,
   getLastAssistantMessage,
   getRecentMessages,
+  hardDeleteMessage,
   insertMessage,
   touchChat,
 } from '../db/chats.js';
@@ -246,10 +247,12 @@ export async function streamAssistantReply(options: {
   userMessage?: MessagePublic;
   /** 连发多条时，把这一批用户消息一起告诉前端 */
   userMessages?: MessagePublic[];
+  /** 重新生成：新回复存好之后再删掉被替换的那条，失败就原样留着 */
+  replaceMessageId?: string;
   userText?: string;
   speakerId?: string;
 }): Promise<void> {
-  const { request, reply, chatId, userMessage, userMessages } = options;
+  const { request, reply, chatId, userMessage, userMessages, replaceMessageId } = options;
   if (!request.user) throw new HttpError(401, '未登录');
   const chat = getChatRow(chatId);
   if (!chat) throw new HttpError(404, '会话不存在');
@@ -400,6 +403,8 @@ export async function streamAssistantReply(options: {
     }
 
     touchChat(chatId, 1);
+    // 新回复已经存好，这时才真正替换掉旧的那条
+    if (replaceMessageId && savedMessages.length > 0) hardDeleteMessage(replaceMessageId);
     event(reply, 'done', { message: saved, messages: savedMessages });
     if (!isGroup) maybeSummarize(chatId);
   } catch (error) {
@@ -407,7 +412,8 @@ export async function streamAssistantReply(options: {
     const message = error instanceof HttpError ? error.message : '生成失败，请稍后重试';
     const text = content.trim();
 
-    if (text) {
+    // 重新生成失败时不要再存半截内容，旧消息保持原样，避免看起来像“记录消失了”
+    if (text && !replaceMessageId) {
       saved = insertMessage({
         chatId,
         role: 'assistant',

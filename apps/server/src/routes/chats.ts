@@ -19,7 +19,6 @@ import {
   getLastAssistantMessage,
   getLastUserMessage,
   getMessage,
-  hardDeleteMessage,
   insertMessage,
   listChats,
   listMessages,
@@ -245,7 +244,6 @@ const chatRoutes: FastifyPluginAsync = async (app) => {
     const userText = lastUser?.content ?? '';
     const speakerId = target?.senderId;
     resolveAssistantTarget({ chatId: id, userText, speakerId });
-    if (target) hardDeleteMessage(target.id);
 
     await streamAssistantReply({
       request: req,
@@ -253,6 +251,8 @@ const chatRoutes: FastifyPluginAsync = async (app) => {
       chatId: id,
       userText,
       speakerId,
+      // 不再先删旧消息：等新回复生成成功后再替换，失败就原样保留
+      replaceMessageId: target?.id,
     });
     return reply;
   });
