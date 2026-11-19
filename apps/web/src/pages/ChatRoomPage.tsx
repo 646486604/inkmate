@@ -3,7 +3,6 @@ import {
   useRef,
   useState,
   type ChangeEvent,
-  type CSSProperties,
   type KeyboardEvent,
 } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -866,10 +865,15 @@ export function ChatRoomPage() {
 
       <div
         ref={scrollRef}
-        className={`flex-1 overflow-y-auto px-4 py-4 ${chat?.background ? 'chat-bg' : ''}`}
+        className="flex-1 overflow-y-auto px-4 py-4"
         style={
           chat?.background
-            ? ({ '--chat-bg-image': `url(${chat.background})` } as CSSProperties)
+            ? {
+                backgroundImage: `url(${chat.background})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                backgroundAttachment: 'local',
+              }
             : undefined
         }
       >

@@ -341,26 +341,6 @@ button:disabled {
   animation: float-in 380ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }
 
-/* 会话背景图：垫一层半透明底，两个主题下文字都还看得清 */
-.chat-bg {
-  position: relative;
-}
-
-.chat-bg::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background-image: var(--chat-bg-image);
-  background-size: cover;
-  background-position: center;
-  opacity: 0.32;
-  pointer-events: none;
-}
-
-.chat-bg > * {
-  position: relative;
-}
-
 @keyframes float-in {
   from {
     opacity: 0;
