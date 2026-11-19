@@ -237,6 +237,7 @@ export type ChatIdentityInput = z.infer<typeof chatIdentitySchema>;
 export const profilePatchSchema = z.object({
   displayName: z.string().trim().max(40, '名字最多 40 个字').optional(),
   persona: z.string().trim().max(4000, '人设最多 4000 个字').optional(),
+  avatar: z.string().trim().max(1000).optional(),
 });
 export type ProfilePatch = z.infer<typeof profilePatchSchema>;
 

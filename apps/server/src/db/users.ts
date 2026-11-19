@@ -26,7 +26,7 @@ export function getPrimaryUser(): PublicUser | null {
 /** 全局「我」的名字与人设；会话里没单独设置时用这份 */
 export function updateUserProfile(
   id: string,
-  patch: { displayName?: string; persona?: string },
+  patch: { displayName?: string; persona?: string; avatar?: string },
 ): PublicUser | null {
   const sets: string[] = [];
   const values: string[] = [];
@@ -37,6 +37,10 @@ export function updateUserProfile(
   if (patch.persona !== undefined) {
     sets.push('persona = ?');
     values.push(patch.persona);
+  }
+  if (patch.avatar !== undefined) {
+    sets.push('avatar = ?');
+    values.push(patch.avatar);
   }
   if (sets.length === 0) return getPrimaryUser();
   values.push(id);

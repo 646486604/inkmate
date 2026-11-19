@@ -106,7 +106,7 @@ function bubbleEntries(text: string): Array<{ text: string; index: number }> {
     .slice(0, 8);
 }
 
-const BUBBLE_BASE = 'rounded-2xl px-3.5 py-2.5 text-[13px] leading-relaxed';
+const BUBBLE_BASE = 'w-fit max-w-full rounded-2xl px-3.5 py-2.5 text-[13px] leading-relaxed';
 const BUBBLE_MINE = `${BUBBLE_BASE} bubble-mine rounded-br-md`;
 const BUBBLE_MINE_FLAT = `${BUBBLE_BASE} bubble-mine`;
 const BUBBLE_OTHER = `${BUBBLE_BASE} bubble-other rounded-bl-md border border-[var(--line)]`;
@@ -1015,7 +1015,11 @@ export function ChatRoomPage() {
                     )
                   ) : null}
 
-                  <div className={`relative max-w-[78%] ${mine ? 'items-end' : 'items-start'}`}>
+                  <div
+                    className={`relative flex max-w-[78%] flex-col ${
+                      mine ? 'items-end' : 'items-start'
+                    }`}
+                  >
                     {isGroup && !mine ? (
                       <p className="mb-0.5 ml-0.5 text-[9px] text-[var(--faint)]">{speakerName}</p>
                     ) : null}
@@ -1176,9 +1180,17 @@ export function ChatRoomPage() {
                   </div>
 
                   {mine ? (
-                    <div className="mt-1 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[var(--seal-bg)] text-[10px] font-medium text-[var(--seal-fg)]">
-                      {(user?.displayName || '我').slice(0, 1)}
-                    </div>
+                    user?.avatar ? (
+                      <img
+                        src={user.avatar}
+                        alt=""
+                        className="mt-1 h-7 w-7 shrink-0 rounded-full object-cover"
+                      />
+                    ) : (
+                      <div className="mt-1 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[var(--seal-bg)] text-[10px] font-medium text-[var(--seal-fg)]">
+                        {(user?.displayName || '我').slice(0, 1)}
+                      </div>
+                    )
                   ) : null}
                 </div>
               </div>
@@ -1224,9 +1236,17 @@ export function ChatRoomPage() {
                   待发 · 点这里移除
                 </button>
               </div>
-              <div className="ml-2 mt-1 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[var(--seal-bg)] text-[10px] font-medium text-[var(--seal-fg)]">
-                {(user?.displayName || '我').slice(0, 1)}
-              </div>
+              {user?.avatar ? (
+                <img
+                  src={user.avatar}
+                  alt=""
+                  className="ml-2 mt-1 h-7 w-7 shrink-0 rounded-full object-cover"
+                />
+              ) : (
+                <div className="ml-2 mt-1 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[var(--seal-bg)] text-[10px] font-medium text-[var(--seal-fg)]">
+                  {(user?.displayName || '我').slice(0, 1)}
+                </div>
+              )}
             </div>
           ))}
 

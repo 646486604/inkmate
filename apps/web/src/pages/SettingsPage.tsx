@@ -67,6 +67,9 @@ export function SettingsPage() {
   const [importing, setImporting] = useState(false);
   const [profileName, setProfileName] = useState('');
   const [profilePersona, setProfilePersona] = useState('');
+  const [profileAvatar, setProfileAvatar] = useState('');
+  const [avatarBusy, setAvatarBusy] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
   const [profileBusy, setProfileBusy] = useState(false);
   const [weatherCity, setWeatherCity] = useState('');
   const [weatherSaving, setWeatherSaving] = useState(false);
@@ -117,7 +120,24 @@ export function SettingsPage() {
     if (!user) return;
     setProfileName(user.displayName ?? '');
     setProfilePersona(user.persona ?? '');
+    setProfileAvatar(user.avatar ?? '');
   }, [user]);
+
+  async function uploadUserAvatar(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (event.target) event.target.value = '';
+    if (!file || avatarBusy) return;
+    setAvatarBusy(true);
+    setError('');
+    try {
+      const uploaded = await api.upload(file);
+      setProfileAvatar(uploaded.url);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '头像上传失败');
+    } finally {
+      setAvatarBusy(false);
+    }
+  }
 
   function updateBubble(patch: Partial<BubbleStyle>) {
     const next = { ...bubbleStyle, ...patch };
@@ -134,6 +154,7 @@ export function SettingsPage() {
       await api.updateProfile({
         displayName: profileName.trim(),
         persona: profilePersona.trim(),
+        avatar: profileAvatar.trim(),
       });
       await refresh();
       setNotice('「我的设定」已保存');
@@ -327,8 +348,49 @@ export function SettingsPage() {
             <p className="mt-1 text-[10px] leading-relaxed text-[var(--faint)]">
               角色眼里「你」是谁。默认全局生效；某个会话要换身份，去聊天页右上角单独设置。
             </p>
+            <div className="mt-3 flex items-center gap-3">
+              {profileAvatar ? (
+                <img
+                  src={profileAvatar}
+                  alt=""
+                  className="h-12 w-12 shrink-0 rounded-2xl object-cover"
+                />
+              ) : (
+                <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-[var(--seal-bg)] text-[15px] font-medium text-[var(--seal-fg)]">
+                  {(profileName || '我').slice(0, 1)}
+                </div>
+              )}
+              <button
+                className="btn btn-ghost h-8 min-h-8 px-3 text-[10px]"
+                disabled={avatarBusy}
+                onClick={() => avatarInputRef.current?.click()}
+              >
+                {avatarBusy ? (
+                  <Loader2 size={11} className="animate-spin" />
+                ) : (
+                  <Upload size={11} />
+                )}
+                换头像
+              </button>
+              {profileAvatar ? (
+                <button
+                  className="text-[10px] text-[var(--faint)] underline"
+                  onClick={() => setProfileAvatar('')}
+                >
+                  清除
+                </button>
+              ) : null}
+              <input
+                ref={avatarInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif,image/avif"
+                className="hidden"
+                onChange={uploadUserAvatar}
+              />
+            </div>
+
             <input
-              className="field mt-3"
+              className="field mt-2"
               value={profileName}
               onChange={(event) => setProfileName(event.target.value)}
               placeholder="名字，例如：林晚"
