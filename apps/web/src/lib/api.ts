@@ -274,6 +274,8 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify({ summary }),
     }),
+  clearMemory: (chatId: string) =>
+    request<{ memory: MemoryPublic }>(`/api/chats/${chatId}/memory`, { method: 'DELETE' }),
   createFact: (chatId: string, input: FactInput) =>
     request<{ fact: FactPublic }>(`/api/chats/${chatId}/facts`, {
       method: 'POST',

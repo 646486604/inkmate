@@ -181,6 +181,13 @@ export function deleteFact(id: string): boolean {
   return Number(result.changes) > 0;
 }
 
+/** 清空一个会话的长期记忆（摘要 + 事实），之后可以从剩下的消息重新整理 */
+export function clearMemory(chatId: string): void {
+  const db = getDb();
+  db.prepare('DELETE FROM chat_summaries WHERE chat_id = ?').run(chatId);
+  db.prepare('DELETE FROM chat_facts WHERE chat_id = ?').run(chatId);
+}
+
 export function countChatMessages(chatId: string): number {
   const row = getDb()
     .prepare('SELECT COUNT(*) AS c FROM messages WHERE chat_id = ? AND deleted_at IS NULL')

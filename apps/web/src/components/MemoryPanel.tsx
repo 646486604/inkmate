@@ -84,6 +84,23 @@ export function MemoryPanel({ chatId, onClose }: { chatId: string; onClose: () =
     }
   }
 
+  async function clearAll() {
+    if (
+      !window.confirm(
+        '清空这个会话的长期记忆（摘要 + 事实）？之后可以从剩下的消息重新整理，删掉的内容不会再回来。',
+      )
+    ) {
+      return;
+    }
+    setError('');
+    try {
+      const result = await api.clearMemory(chatId);
+      applyMemory(result.memory);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '清空记忆失败');
+    }
+  }
+
   async function addFact() {
     const content = newFact.trim();
     if (!content) return;
@@ -187,6 +204,12 @@ export function MemoryPanel({ chatId, onClose }: { chatId: string; onClose: () =
                     <RefreshCw size={11} />
                   )}
                   立即整理
+                </button>
+                <button
+                  className="btn btn-ghost h-7 min-h-7 px-2 text-[10px] text-[var(--accent-strong)]"
+                  onClick={() => void clearAll()}
+                >
+                  清空记忆
                 </button>
               </div>
               <textarea
