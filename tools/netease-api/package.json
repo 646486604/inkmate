@@ -1,0 +1,9 @@
+{
+  "name": "inkmate-netease-sidecar",
+  "version": "0.0.0",
+  "private": true,
+  "description": "墨伴「一起听」的网易云边车；独立依赖，不并入主服务 workspaces",
+  "dependencies": {
+    "NeteaseCloudMusicApi": "4.34.1"
+  }
+}

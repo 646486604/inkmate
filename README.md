@@ -66,8 +66,16 @@ cd ~/inkmate && npm install && npm run build
 bash scripts/termux-start.sh              # 后台起服务 + 等就绪 + 直接打开浏览器
 ```
 
-`scripts/termux-start.sh` 会后台拉起 `apps/server/dist/index.js`，轮询 `/api/health` 就绪后用
-`termux-open-url` 打开 `http://127.0.0.1:8787`，不用手动复制链接。
+`scripts/termux-start.sh` 会先确保网易云边车在跑（默认 `127.0.0.1:3000`；第一次会自动安装，约 1–3 分钟），
+再后台拉起 `apps/server/dist/index.js`，轮询 `/api/health` 就绪后用 `termux-open-url` 打开
+`http://127.0.0.1:8787`。所以之后只要打开墨伴，就能直接搜歌/听歌，不用单独启动边车。
+
+边车依赖装在 `tools/netease-api`（固定 `NeteaseCloudMusicApi@4.34.1`，独立 `node_modules`）。不想用网易云、
+只用本地曲库时，启动前设 `INKMATE_NO_NETEASE=1`；边车日志在 `~/inkmate-netease.log`。
+边车是匿名状态：能搜、能播免费/未下架曲目，VIP 和下架歌仍会提示不可播。
+
+> 这里的「打开墨伴」指运行 `termux-start.sh`（或给它建的主屏快捷方式），不是只点 PWA 图标——
+> PWA 只是前端壳，后台的墨伴服务和边车还是得由 Termux 拉起来。
 
 以后每次：
 
@@ -76,8 +84,10 @@ bash scripts/termux-start.sh              # 后台起服务 + 等就绪 + 直接
 | `bash ~/inkmate/scripts/termux-start.sh` | 启动并打开浏览器 |
 | `bash ~/inkmate/scripts/termux-start.sh restart` | 重启并打开浏览器 |
 | `bash ~/inkmate/scripts/termux-start.sh stop` | 停止 |
-| `bash ~/inkmate/scripts/termux-start.sh status` | 看是否在跑 |
-| `bash ~/inkmate/scripts/termux-start.sh log` | 跟踪 `~/inkmate.log`（Ctrl+C 只退出跟踪） |
+| `bash ~/inkmate/scripts/termux-start.sh status` | 看墨伴和边车是否在跑 |
+| `bash ~/inkmate/scripts/termux-start.sh log` | 跟踪墨伴 `~/inkmate.log`（Ctrl+C 只退出跟踪） |
+| `bash ~/inkmate/scripts/termux-start.sh ncm-log` | 跟踪边车 `~/inkmate-netease.log` |
+| `bash ~/inkmate/scripts/termux-start.sh install` | 只安装/补装边车依赖，不启动 |
 
 更新到最新提交（`data/` 在 gitignore 里，聊天记录不受影响）：
 
@@ -100,6 +110,8 @@ chmod +x ~/.termux/boot/inkmate.sh
   起服务时加 `HOST=0.0.0.0`，并先改掉默认密码。
 - Node 22 上 `node:sqlite` 可能需要 `--experimental-sqlite`，脚本会自动探测补上。
 - 建议 `termux-wake-lock` + 关闭 Termux 的电池优化；Android 12+ 仍可能杀后台，旧手机插电专用最稳。
+- 边车和墨伴一起启停：`stop` 会两个都停，`restart` 两个都重启；`start` 时如果 3000 端口已有边车会直接复用。
+  Android 杀掉 Termux 后不会自动拉起，重新执行一次 `start` 即可。边车首次安装会占手机约几十 MB。
 - 手机浏览器里「添加到主屏幕」即可当 PWA 用。
 
 ## M6 能做什么
