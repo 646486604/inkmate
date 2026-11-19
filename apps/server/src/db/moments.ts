@@ -127,14 +127,22 @@ export function listMoments(
   userId: string,
   limit = 20,
   before?: number,
+  characterId?: string,
 ): MomentPublic[] {
   const rows = getDb()
     .prepare(
       `SELECT * FROM moments
        WHERE (? IS NULL OR created_at < ?)
+         AND (? IS NULL OR (author_type = 'character' AND author_id = ?))
        ORDER BY created_at DESC LIMIT ?`,
     )
-    .all(before ?? null, before ?? null, Math.min(50, Math.max(1, limit))) as unknown as MomentRow[];
+    .all(
+      before ?? null,
+      before ?? null,
+      characterId ?? null,
+      characterId ?? null,
+      Math.min(50, Math.max(1, limit)),
+    ) as unknown as MomentRow[];
   return rows.map((row) => toMoment(row, userId));
 }
 

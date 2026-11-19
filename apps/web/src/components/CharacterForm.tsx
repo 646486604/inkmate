@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Loader2, RefreshCw, Sparkles, X } from 'lucide-react';
+import { useRef, useState, type ChangeEvent } from 'react';
+import { Loader2, RefreshCw, Sparkles, Upload, X } from 'lucide-react';
 import type {
   CharacterInput,
   CharacterPatch,
@@ -59,6 +59,24 @@ export function CharacterForm({
   const [modelOptions, setModelOptions] = useState<string[]>([]);
   const [fetchingModels, setFetchingModels] = useState(false);
   const [modelNote, setModelNote] = useState('');
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const avatarFileRef = useRef<HTMLInputElement>(null);
+
+  async function handleAvatarFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (event.target) event.target.value = '';
+    if (!file) return;
+    setAvatarUploading(true);
+    setError('');
+    try {
+      const result = await api.upload(file);
+      setAvatar(result.url);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '头像上传失败');
+    } finally {
+      setAvatarUploading(false);
+    }
+  }
 
   const selectedProvider =
     enabledProviders.find((item) => item.id === providerId) ?? enabledProviders[0];
@@ -149,7 +167,7 @@ export function CharacterForm({
               className="field"
               value={name}
               onChange={(event) => setName(event.target.value)}
-              placeholder="沈初岭"
+              placeholder="角色名字"
               maxLength={60}
             />
           </label>
@@ -159,7 +177,7 @@ export function CharacterForm({
               className="field"
               value={nickname}
               onChange={(event) => setNickname(event.target.value)}
-              placeholder="初岭"
+              placeholder="你想怎么叫 TA"
               maxLength={60}
             />
           </label>
@@ -468,18 +486,47 @@ export function CharacterForm({
           </label>
         </div>
 
-        <label className="block">
+        <div className="block">
           <span className="mb-1.5 block text-[10px] tracking-[0.16em] text-[var(--muted)]">
-            头像 URL（可选）
+            头像（可选）
           </span>
-          <input
-            className="field"
-            value={avatar}
-            onChange={(event) => setAvatar(event.target.value)}
-            placeholder="https://... 或留空用姓氏头像"
-            spellCheck={false}
-          />
-        </label>
+          <div className="flex items-center gap-3">
+            {avatar ? (
+              <img src={avatar} alt="" className="h-12 w-12 shrink-0 rounded-2xl object-cover" />
+            ) : (
+              <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-[var(--paper-strong)] text-[13px] font-medium text-[var(--faint)]">
+                {name.trim().slice(0, 1) || '?'}
+              </div>
+            )}
+            <input
+              className="field flex-1"
+              value={avatar}
+              onChange={(event) => setAvatar(event.target.value)}
+              placeholder="图片 URL，或点右侧上传"
+              spellCheck={false}
+            />
+            <button
+              type="button"
+              className="btn btn-ghost h-10 min-h-10 px-3 text-[11px]"
+              disabled={avatarUploading}
+              onClick={() => avatarFileRef.current?.click()}
+            >
+              {avatarUploading ? (
+                <Loader2 size={12} className="animate-spin" />
+              ) : (
+                <Upload size={12} />
+              )}
+              上传
+            </button>
+            <input
+              ref={avatarFileRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif,image/avif"
+              className="hidden"
+              onChange={handleAvatarFile}
+            />
+          </div>
+        </div>
       </div>
 
       {error ? (

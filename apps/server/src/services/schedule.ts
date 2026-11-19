@@ -275,13 +275,15 @@ async function generatePlan(
         {
           role: 'system',
           content: [
-            '你是角色生活日程生成器，不写台词，只输出 JSON。',
+            '你是角色当天「计划表」的生成器，不写台词，只输出 JSON。',
             '格式：{"day_type":"workday|weekend|ordinary","mood":"...","summary":"...","beats":[{"start":"HH:MM","end":"HH:MM","activity":"...","location":"...","energy":"low|normal|high","contact":{"worthy":true,"intent":"...","tone":"..."}}]}',
             '规则：',
             '- 6–10 个生活节拍，从起床到睡前，时间递增；活动要符合角色设定。',
+            '- 这是“打算做什么”的计划，不是已经发生的事实：允许推迟、取消、临时改变，也别写得像流水账。',
             '- 1–4 个 contact.worthy=true 的联系点，间隔至少 60 分钟；intent 写“为什么此刻想找对方”。',
             '- 80% 是普通日常，不要每天都发生戏剧性事件；不要写用户也在场。',
             '- 不要写“发消息”“联系用户”这类出戏措辞，只写角色自己的生活。',
+            '- 不要编造具体的天气、新闻、比赛结果等外部事实。',
           ].join('\n'),
         },
         {
@@ -294,7 +296,7 @@ async function generatePlan(
               ? `昨天：${yesterday.summary || yesterday.mood || '（无摘要）'}`
               : '昨天：（没有记录）',
             memory ? `最近记忆：\n${memory}` : '',
-            '请生成今天的日程，只输出 JSON。',
+            '请生成今天的计划，只输出 JSON。',
           ]
             .filter(Boolean)
             .join('\n'),

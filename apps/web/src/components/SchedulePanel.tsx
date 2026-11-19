@@ -42,7 +42,7 @@ export function SchedulePanel({
       const result = await api.schedule(characterId);
       setPlan(result.plan);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : '加载日程失败');
+      setError(err instanceof ApiError ? err.message : '加载计划失败');
     } finally {
       setLoading(false);
     }
@@ -56,7 +56,7 @@ export function SchedulePanel({
         if (alive) setPlan(result.plan);
       })
       .catch((err) => {
-        if (alive) setError(err instanceof ApiError ? err.message : '加载日程失败');
+        if (alive) setError(err instanceof ApiError ? err.message : '加载计划失败');
       })
       .finally(() => {
         if (alive) setLoading(false);
@@ -74,9 +74,9 @@ export function SchedulePanel({
     try {
       const result = await api.refreshPlan(characterId);
       setPlan(result.plan);
-      setNotice('今天的日程已重新生成');
+      setNotice('今天的计划已重新生成');
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : '生成日程失败');
+      setError(err instanceof ApiError ? err.message : '生成计划失败');
     } finally {
       setBusy(false);
     }
@@ -124,7 +124,7 @@ export function SchedulePanel({
               <CalendarDays size={17} />
             </span>
             <div>
-              <p className="text-[14px] font-medium">今天的日程</p>
+              <p className="text-[14px] font-medium">今天的计划</p>
               <p className="mt-0.5 text-[10px] text-[var(--faint)]">
                 TA 会在这些节拍里决定要不要找你
               </p>
@@ -238,7 +238,7 @@ export function SchedulePanel({
         ) : (
           <div className="mt-6 rounded-2xl border border-dashed border-[var(--line-strong)] px-4 py-8 text-center">
             <CalendarDays size={24} className="mx-auto text-[var(--faint)]" />
-            <p className="mt-3 text-[12px]">今天还没有日程</p>
+            <p className="mt-3 text-[12px]">今天还没有计划</p>
             <p className="mt-1 text-[10px] leading-relaxed text-[var(--faint)]">
               开启主动消息后，角色会在每天固定时间自己生成；也可以手动生成一份。
             </p>
@@ -248,7 +248,7 @@ export function SchedulePanel({
               onClick={() => void refresh()}
             >
               {busy ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-              生成今天日程
+              生成今天计划
             </button>
           </div>
         )}

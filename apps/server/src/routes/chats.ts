@@ -4,6 +4,7 @@ import {
   chatIdentitySchema,
   factInputSchema,
   regenerateSchema,
+  sendBatchSchema,
   sendMessageSchema,
   summaryPatchSchema,
 } from '@inkmate/shared';
@@ -155,6 +156,39 @@ const chatRoutes: FastifyPluginAsync = async (app) => {
       chatId: id,
       userMessage,
       userText: input.content,
+    });
+    return reply;
+  });
+
+  // 攒了好几条一起发：先按顺序插入全部用户消息，再只生成一条回复
+  app.post('/:id/messages/batch', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const chat = getChatRow(id);
+    if (!chat) throw new HttpError(404, '会话不存在');
+    if (!req.user) throw new HttpError(401, '未登录');
+
+    const input = sendBatchSchema.parse(req.body);
+    const userText = input.contents.join('\n');
+    resolveAssistantTarget({ chatId: id, userText });
+
+    const inserted = input.contents.map((content) =>
+      insertMessage({
+        chatId: id,
+        role: 'user',
+        senderId: req.user!.id,
+        kind: 'text',
+        content,
+      }),
+    );
+    touchChat(id, 0);
+    markChatRead(id);
+
+    await streamAssistantReply({
+      request: req,
+      reply,
+      chatId: id,
+      userMessages: inserted,
+      userText,
     });
     return reply;
   });

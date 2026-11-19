@@ -73,7 +73,10 @@ export function AppShell() {
             className={`chip ${online ? '' : 'text-[var(--accent-strong)]'}`}
             title={online ? '服务在响应' : '服务 5 秒没响应：Termux 可能被系统冻结，或进程已退出'}
           >
-            <span className="badge-dot" style={online ? undefined : { background: 'var(--accent-strong)' }} />
+            <span
+              className="badge-dot"
+              style={{ background: online ? '#2fa463' : 'var(--accent-strong)' }}
+            />
             {online ? '在线' : '离线'}
           </span>
           <div className="grid h-10 w-10 place-items-center rounded-full border border-[var(--line)] bg-[var(--seal-bg)] text-[13px] font-medium text-[var(--seal-fg)] shadow-sm">

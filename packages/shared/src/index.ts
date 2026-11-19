@@ -223,6 +223,15 @@ export const sendMessageSchema = z.object({
 });
 export type SendMessageInput = z.infer<typeof sendMessageSchema>;
 
+/** 攒了几条一起发：一次插入多条用户消息，再生成一条回复 */
+export const sendBatchSchema = z.object({
+  contents: z
+    .array(z.string().trim().min(1, '消息不能为空').max(8000))
+    .min(1, '至少要有一条消息')
+    .max(10, '一次最多连发 10 条'),
+});
+export type SendBatchInput = z.infer<typeof sendBatchSchema>;
+
 export const editMessageSchema = z.object({
   content: z.string().trim().min(1, '消息不能为空').max(8000),
 });

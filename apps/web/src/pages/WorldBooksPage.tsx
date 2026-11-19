@@ -261,7 +261,7 @@ export function WorldBooksPage() {
               </span>
               <p className="mt-3 text-[13px]">还没有世界书</p>
               <p className="mt-1 max-w-[250px] text-[11px] leading-relaxed text-[var(--faint)]">
-                比如「枫城一高」：学校规则、班级、常去的地方，都可以写成条目。
+                比如「学校」：作息规则、班级、常去的地方，都可以写成条目。
               </p>
               <button className="btn btn-accent mt-4" onClick={() => setBookForm({ ...emptyBook })}>
                 <Sparkles size={14} />
@@ -442,7 +442,7 @@ export function WorldBooksPage() {
               className="field"
               value={bookForm.name}
               onChange={(event) => setBookForm({ ...bookForm, name: event.target.value })}
-              placeholder="名称，例如：枫城一高"
+              placeholder="世界书名称"
               maxLength={80}
             />
             <textarea

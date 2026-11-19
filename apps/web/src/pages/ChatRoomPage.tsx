@@ -87,7 +87,9 @@ function splitBubbles(text: string): string[] {
 
 const BUBBLE_BASE = 'rounded-2xl px-3.5 py-2.5 text-[13px] leading-relaxed';
 const BUBBLE_MINE = `${BUBBLE_BASE} rounded-br-md bg-[var(--ink)] text-[var(--paper)]`;
+const BUBBLE_MINE_FLAT = `${BUBBLE_BASE} bg-[var(--ink)] text-[var(--paper)]`;
 const BUBBLE_OTHER = `${BUBBLE_BASE} rounded-bl-md border border-[var(--line)] bg-[var(--card-solid)] text-[var(--ink)]`;
+const BUBBLE_OTHER_FLAT = `${BUBBLE_BASE} border border-[var(--line)] bg-[var(--card-solid)] text-[var(--ink)]`;
 
 export function ChatRoomPage() {
   const { id } = useParams<{ id: string }>();
@@ -106,6 +108,7 @@ export function ChatRoomPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
   const [input, setInput] = useState('');
+  const [pending, setPending] = useState<string[]>([]);
   const [editing, setEditing] = useState<{ id: string; content: string } | null>(null);
   const [streaming, setStreaming] = useState<{ text: string; createdAt: number } | null>(null);
   const [streamingSpeaker, setStreamingSpeaker] = useState<ChatMemberPublic | null>(null);
@@ -236,10 +239,11 @@ export function ChatRoomPage() {
   }
 
   async function sendText() {
-    const content = input.trim();
-    if (!id || !content || sending) return;
+    if (!id || sending) return;
 
     if (editing) {
+      const content = input.trim();
+      if (!content) return;
       try {
         const result = await api.editMessage(editing.id, content);
         setMessages((current) => upsert(current, result.message));
@@ -251,16 +255,23 @@ export function ChatRoomPage() {
       return;
     }
 
+    const batch = [...pending, input.trim()].filter(Boolean).slice(0, 10);
+    if (batch.length === 0) return;
+
     setInput('');
+    setPending([]);
     setEmojiOpen(false);
     const controller = beginStream();
     try {
       await streamAssistant(
-        `/api/chats/${id}/messages`,
-        { content, kind: 'text' },
+        `/api/chats/${id}/messages/batch`,
+        { contents: batch },
         {
           onStart: (data) => {
-            if (data.userMessage) setMessages((current) => upsert(current, data.userMessage!));
+            const inserted = data.userMessages ?? (data.userMessage ? [data.userMessage] : []);
+            if (inserted.length > 0) {
+              setMessages((current) => inserted.reduce((acc, message) => upsert(acc, message), current));
+            }
             setStreamingSpeaker(data.speaker ?? null);
             setStreaming({ text: '', createdAt: data.createdAt });
           },
@@ -284,10 +295,18 @@ export function ChatRoomPage() {
     } catch (err) {
       if (!controller.signal.aborted) {
         setError(err instanceof ApiError ? err.message : '发送失败');
-        setInput(content);
+        setInput(batch.join('\n'));
       }
       finishStream();
     }
+  }
+
+  function queueMessage() {
+    const text = input.trim();
+    if (!text) return;
+    setPending((current) => [...current, text].slice(0, 10));
+    setInput('');
+    inputRef.current?.focus();
   }
 
   async function sendImage(input: File | string) {
@@ -526,13 +545,18 @@ export function ChatRoomPage() {
             {characterName.slice(0, 1)}
           </div>
         )}
-        <div className="min-w-0 flex-1">
+        <button
+          className="min-w-0 flex-1 text-left"
+          onClick={() => {
+            if (!isGroup && chat?.characterId) navigate(`/characters/${chat.characterId}`);
+          }}
+        >
           <p className="truncate text-[14px] font-medium">{characterName}</p>
           <p className="mt-0.5 flex items-center gap-1 text-[10px] text-[var(--faint)]">
-            {!isGroup ? <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]" /> : null}
-            {isGroup ? `${memberCount} 人` : '在线'}
+            {!isGroup ? <span className="h-1.5 w-1.5 rounded-full bg-[#2fa463]" /> : null}
+            {isGroup ? `${memberCount} 人` : '在线 · 点开看主页'}
           </p>
-        </div>
+        </button>
         <div className="relative">
           <button
             className="btn btn-quiet h-9 min-h-9 px-2"
@@ -552,7 +576,7 @@ export function ChatRoomPage() {
                     }}
                   >
                     <CalendarDays size={12} className="mr-1.5 inline" />
-                    今天的日程
+                    今天的计划
                   </button>
                   <button
                     className="block w-full rounded-lg px-3 py-2 text-left hover:bg-[var(--accent-soft)]"
@@ -660,6 +684,14 @@ export function ChatRoomPage() {
             const mine = message.role === 'user';
             const previous = messages[index - 1];
             const showTime = shouldShowTime(previous, message);
+            // 同一个人连发的消息归成一组：只有第一条带“尾巴”，后面都是整齐的圆角方块
+            const grouped = Boolean(
+              previous &&
+                previous.role === message.role &&
+                previous.senderId === message.senderId &&
+                !previous.deletedAt &&
+                message.createdAt - previous.createdAt < 2 * 60 * 1000,
+            );
             const isAction = actionId === message.id;
             const member = !mine
               ? chat?.members.find((item) => item.characterId === message.senderId) ?? null
@@ -677,7 +709,9 @@ export function ChatRoomPage() {
                 ) : null}
                 <div className={`group flex items-start gap-2 ${mine ? 'justify-end' : 'justify-start'}`}>
                   {!mine ? (
-                    speakerAvatar ? (
+                    grouped ? (
+                      <span className="mt-1 h-7 w-7 shrink-0" aria-hidden />
+                    ) : speakerAvatar ? (
                       <img
                         src={speakerAvatar}
                         alt=""
@@ -698,11 +732,31 @@ export function ChatRoomPage() {
                       <p className="mb-0.5 ml-0.5 text-[9px] text-[var(--faint)]">{speakerName}</p>
                     ) : null}
                     {message.deletedAt ? (
-                      <div className={`relative ${mine ? BUBBLE_MINE : BUBBLE_OTHER}`}>
+                      <div
+                        className={`relative ${
+                          mine
+                            ? grouped
+                              ? BUBBLE_MINE_FLAT
+                              : BUBBLE_MINE
+                            : grouped
+                              ? BUBBLE_OTHER_FLAT
+                              : BUBBLE_OTHER
+                        }`}
+                      >
                         <span className="text-[11px] italic opacity-60">消息已删除</span>
                       </div>
                     ) : message.kind === 'image' ? (
-                      <div className={`relative ${mine ? BUBBLE_MINE : BUBBLE_OTHER}`}>
+                      <div
+                        className={`relative ${
+                          mine
+                            ? grouped
+                              ? BUBBLE_MINE_FLAT
+                              : BUBBLE_MINE
+                            : grouped
+                              ? BUBBLE_OTHER_FLAT
+                              : BUBBLE_OTHER
+                        }`}
+                      >
                         <img
                           src={message.content}
                           alt="图片消息"
@@ -711,13 +765,18 @@ export function ChatRoomPage() {
                         />
                       </div>
                     ) : mine ? (
-                      <div className={`relative ${BUBBLE_MINE}`}>
+                      <div className={`relative ${grouped ? BUBBLE_MINE_FLAT : BUBBLE_MINE}`}>
                         <p className="whitespace-pre-wrap break-words">{message.content}</p>
                       </div>
                     ) : (
                       <div className="space-y-1.5">
                         {splitBubbles(message.content).map((part, bubbleIndex) => (
-                          <div key={bubbleIndex} className={BUBBLE_OTHER}>
+                          <div
+                            key={bubbleIndex}
+                            className={
+                              bubbleIndex === 0 && !grouped ? BUBBLE_OTHER : BUBBLE_OTHER_FLAT
+                            }
+                          >
                             <Markdown content={part} />
                           </div>
                         ))}
@@ -945,6 +1004,24 @@ export function ChatRoomPage() {
           </div>
         ) : null}
 
+        {pending.length > 0 ? (
+          <div className="mb-2 flex flex-wrap items-center gap-1.5 rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] px-2 py-1.5">
+            <span className="text-[9px] text-[var(--faint)]">待发 {pending.length} 条</span>
+            {pending.map((text, index) => (
+              <span key={`${index}-${text.slice(0, 8)}`} className="chip max-w-[45%]">
+                <span className="truncate">{text}</span>
+                <button
+                  className="ml-0.5 text-[var(--faint)]"
+                  onClick={() => setPending((current) => current.filter((_, i) => i !== index))}
+                  aria-label="移除"
+                >
+                  <X size={10} />
+                </button>
+              </span>
+            ))}
+          </div>
+        ) : null}
+
         <div className="flex items-end gap-2">
           <button
             className="btn btn-quiet h-9 min-h-9 px-2"
@@ -975,9 +1052,18 @@ export function ChatRoomPage() {
             value={input}
             onChange={(event) => setInput(event.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={editing ? '修改后保存' : '说点什么…'}
+            placeholder={editing ? '修改后保存' : pending.length ? '再写点，或者直接发送' : '说点什么…'}
             disabled={sending && !editing}
           />
+          <button
+            className="btn btn-quiet h-9 min-h-9 px-2"
+            onClick={queueMessage}
+            disabled={!input.trim() || sending || Boolean(editing)}
+            title="先攒着，稍后几条一起发"
+            aria-label="攒一条"
+          >
+            <Plus size={18} />
+          </button>
           {sending ? (
             <button className="btn btn-ghost h-9 min-h-9 px-3" onClick={stop} aria-label="停止">
               <Square size={15} fill="currentColor" />
@@ -986,7 +1072,7 @@ export function ChatRoomPage() {
             <button
               className="btn btn-accent h-9 min-h-9 px-3"
               onClick={() => void sendText()}
-              disabled={!input.trim()}
+              disabled={!input.trim() && pending.length === 0}
               aria-label="发送"
             >
               <ArrowUp size={18} />

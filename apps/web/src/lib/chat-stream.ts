@@ -4,6 +4,8 @@ import { ApiError } from './api';
 export interface StreamStart {
   createdAt: number;
   userMessage: MessagePublic | null;
+  /** 连发多条时，这一批用户消息（顺序即插入顺序） */
+  userMessages?: MessagePublic[];
   speaker?: ChatMemberPublic | null;
 }
 

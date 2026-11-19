@@ -10,6 +10,7 @@ import { MusicPage } from './pages/MusicPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { CharactersPage } from './pages/CharactersPage';
 import { ChatRoomPage } from './pages/ChatRoomPage';
+import { CharacterProfilePage } from './pages/CharacterProfilePage';
 import { WorldBooksPage } from './pages/WorldBooksPage';
 
 function Splash() {
@@ -56,6 +57,7 @@ export default function App() {
             <Route path="/settings" element={<SettingsPage />} />
           </Route>
           <Route path="/chats/:id" element={<ChatRoomPage />} />
+          <Route path="/characters/:id" element={<CharacterProfilePage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

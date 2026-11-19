@@ -109,10 +109,12 @@ export async function streamAssistantReply(options: {
   reply: FastifyReply;
   chatId: string;
   userMessage?: MessagePublic;
+  /** 连发多条时，把这一批用户消息一起告诉前端 */
+  userMessages?: MessagePublic[];
   userText?: string;
   speakerId?: string;
 }): Promise<void> {
-  const { request, reply, chatId, userMessage } = options;
+  const { request, reply, chatId, userMessage, userMessages } = options;
   if (!request.user) throw new HttpError(401, '未登录');
   const chat = getChatRow(chatId);
   if (!chat) throw new HttpError(404, '会话不存在');
@@ -182,6 +184,7 @@ export async function streamAssistantReply(options: {
   event(reply, 'start', {
     createdAt: Date.now(),
     userMessage: userMessage ?? null,
+    userMessages: userMessages ?? (userMessage ? [userMessage] : []),
     speaker: speaker,
   });
 

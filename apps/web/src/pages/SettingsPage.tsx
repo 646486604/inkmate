@@ -116,6 +116,19 @@ export function SettingsPage() {
     void loadProviders();
   }
 
+  async function toggleProvider(provider: ProviderPublic) {
+    setBusyId(provider.id);
+    setError('');
+    try {
+      await api.updateProvider(provider.id, { enabled: !provider.enabled });
+      await loadProviders();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '切换失败');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function removeProvider(provider: ProviderPublic) {
     const ok = window.confirm(`删除「${provider.name}」？已保存的 Key 也会一起删除。`);
     if (!ok) return;
@@ -331,12 +344,26 @@ export function SettingsPage() {
                     >
                       编辑服务
                     </button>
-                    {provider.enabled ? (
-                      <span className="flex items-center gap-1 text-[10px] text-[var(--faint)]">
-                        <span className="badge-dot" />
-                        已启用
-                      </span>
-                    ) : null}
+                    <button
+                      className="btn btn-ghost h-8 min-h-8 px-3 text-[10px]"
+                      onClick={() => void toggleProvider(provider)}
+                      disabled={isBusy}
+                    >
+                      {provider.enabled ? '停用' : '启用'}
+                    </button>
+                    <span
+                      className={`flex items-center gap-1 text-[10px] ${
+                        provider.enabled ? 'text-[var(--faint)]' : 'text-[var(--accent-strong)]'
+                      }`}
+                    >
+                      <span
+                        className="badge-dot"
+                        style={{
+                          background: provider.enabled ? '#2fa463' : 'var(--accent-strong)',
+                        }}
+                      />
+                      {provider.enabled ? '已启用' : '已停用'}
+                    </span>
                   </div>
                 </div>
               );
