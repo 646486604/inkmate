@@ -68,6 +68,7 @@ CREATE TABLE IF NOT EXISTS chats (
   character_id TEXT,
   user_name TEXT NOT NULL DEFAULT '',
   user_persona TEXT NOT NULL DEFAULT '',
+  background TEXT NOT NULL DEFAULT '',
   last_message_at INTEGER,
   unread_count INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL

@@ -4,6 +4,7 @@ import type {
   ChatMemberPublic,
   MemoryPublic,
   MessagePublic,
+  StickerPublic,
 } from '@inkmate/shared';
 import { getCharacter } from '../db/characters.js';
 import {
@@ -22,6 +23,40 @@ import { resolveProviderForCharacter } from '../llm/resolve.js';
 import { streamChat } from '../llm/stream.js';
 import { maybeSummarize } from './memory.js';
 import { getScheduleContext } from './schedule.js';
+import { getWeatherText } from './weather.js';
+import { listStickers, stickersForPrompt } from './stickers.js';
+
+const STICKER_LINE = /^\s*\[(?:表情|sticker)\s*[:：]\s*(.+?)\]\s*$/i;
+
+/** 把「[表情:猫猫得意]」这种标记换成要发的表情包，其余留给文字 */
+function parseStickerReply(
+  raw: string,
+  stickers: StickerPublic[],
+): { text: string; stickers: StickerPublic[] } {
+  const textLines: string[] = [];
+  const picked: StickerPublic[] = [];
+  for (const line of raw.split('\n')) {
+    const match = STICKER_LINE.exec(line);
+    if (!match) {
+      textLines.push(line);
+      continue;
+    }
+    const desc = match[1]?.trim() ?? '';
+    const found =
+      stickers.find((item) => item.desc && item.desc === desc) ??
+      stickers.find(
+        (item) => item.desc && (item.desc.includes(desc) || desc.includes(item.desc)),
+      );
+    if (found) picked.push(found);
+  }
+  // 行内残留的标记直接去掉，避免直接念给用户看
+  const text = textLines
+    .join('\n')
+    .replace(/\[(?:表情|sticker)\s*[:：][^\]]*\]/gi, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  return { text, stickers: picked };
+}
 
 const SSE_HEADERS = {
   'Content-Type': 'text/event-stream; charset=utf-8',
@@ -151,6 +186,8 @@ export async function streamAssistantReply(options: {
     name: (chat.user_name ?? '').trim(),
     persona: (chat.user_persona ?? '').trim(),
   };
+  const weather = await getWeatherText();
+  const stickerLibrary = stickersForPrompt();
   const messages = isGroup
     ? buildGroupMessages({
         title: chat.title,
@@ -160,6 +197,8 @@ export async function streamAssistantReply(options: {
         identity,
         history,
         worldEntries,
+        weather,
+        stickers: stickerLibrary,
       })
     : buildChatMessages({
         character,
@@ -169,6 +208,8 @@ export async function streamAssistantReply(options: {
         worldEntries,
         memory: memory ?? undefined,
         schedule: schedule ?? undefined,
+        weather,
+        stickers: stickerLibrary,
       });
 
   reply.hijack();
@@ -196,17 +237,39 @@ export async function streamAssistantReply(options: {
       event(reply, 'delta', { text: delta });
     }
 
-    const text = content.trim();
-    if (!text) throw new HttpError(502, '模型没有返回内容');
-    saved = insertMessage({
-      chatId,
-      role: 'assistant',
-      senderId: character.id,
-      kind: 'text',
-      content: text,
-    });
+    const parsed = parseStickerReply(content.trim(), listStickers());
+    if (!parsed.text && parsed.stickers.length === 0) {
+      throw new HttpError(502, '模型没有返回内容');
+    }
+
+    const savedMessages: MessagePublic[] = [];
+    if (parsed.text) {
+      const textMessage = insertMessage({
+        chatId,
+        role: 'assistant',
+        senderId: character.id,
+        kind: 'text',
+        content: parsed.text,
+      });
+      savedMessages.push(textMessage);
+      saved = textMessage;
+      event(reply, 'message', { message: textMessage });
+    }
+    for (const sticker of parsed.stickers) {
+      const imageMessage = insertMessage({
+        chatId,
+        role: 'assistant',
+        senderId: character.id,
+        kind: 'image',
+        content: sticker.url,
+      });
+      savedMessages.push(imageMessage);
+      saved = imageMessage;
+      event(reply, 'message', { message: imageMessage });
+    }
+
     touchChat(chatId, 1);
-    event(reply, 'done', { message: saved });
+    event(reply, 'done', { message: saved, messages: savedMessages });
     if (!isGroup) maybeSummarize(chatId);
   } catch (error) {
     const aborted = controller.signal.aborted || reply.raw.destroyed;

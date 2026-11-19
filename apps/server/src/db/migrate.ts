@@ -35,4 +35,5 @@ export function migrate(db: DatabaseSync): void {
   // 会话级「我」的身份：空串表示沿用全局 user.persona / displayName
   addColumn(db, 'chats', 'user_name', "TEXT NOT NULL DEFAULT ''");
   addColumn(db, 'chats', 'user_persona', "TEXT NOT NULL DEFAULT ''");
+  addColumn(db, 'chats', 'background', "TEXT NOT NULL DEFAULT ''");
 }

@@ -19,6 +19,7 @@ import momentRoutes from './routes/moments.js';
 import musicRoutes from './routes/music.js';
 import pushRoutes from './routes/push.js';
 import stickerRoutes from './routes/stickers.js';
+import settingsRoutes from './routes/settings.js';
 import backupRoutes from './routes/backup.js';
 import { startProactiveScheduler } from './services/schedule.js';
 import { startMomentScheduler } from './services/moments.js';
@@ -147,6 +148,7 @@ await app.register(momentRoutes, { prefix: '/api/moments' });
 await app.register(musicRoutes, { prefix: '/api/music' });
 await app.register(pushRoutes, { prefix: '/api/push' });
 await app.register(stickerRoutes, { prefix: '/api/stickers' });
+await app.register(settingsRoutes, { prefix: '/api/settings' });
 await app.register(backupRoutes, { prefix: '/api/backup' });
 
 if (existsSync(join(webDist, 'index.html'))) {

@@ -3,13 +3,11 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { pipeline } from 'node:stream/promises';
 import type { FastifyPluginAsync } from 'fastify';
-import { STICKER_MAX_BYTES, STICKER_MAX_COUNT } from '@inkmate/shared';
+import { STICKER_MAX_BYTES, STICKER_MAX_COUNT, type StickerPublic } from '@inkmate/shared';
 import { requireAuth } from '../auth/session.js';
 import { uploadsDir } from '../env.js';
-import { getSetting, setSetting } from '../db/settings.js';
 import { HttpError } from '../lib/http-error.js';
-
-const KEY = 'stickers';
+import { listStickers, saveStickers } from '../services/stickers.js';
 
 const EXT_BY_MIME: Record<string, string> = {
   'image/png': '.png',
@@ -19,19 +17,11 @@ const EXT_BY_MIME: Record<string, string> = {
   'image/avif': '.avif',
 };
 
-function listStickers(): string[] {
-  const value = getSetting<unknown>(KEY, []);
-  return Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === 'string')
-    : [];
-}
-
 const stickerRoutes: FastifyPluginAsync = async (app) => {
   app.addHook('preHandler', requireAuth);
 
   app.get('/', async () => ({ stickers: listStickers() }));
 
-  // 上传一张表情包：文件进 data/uploads，url 记到 settings 里
   app.post('/', async (req, reply) => {
     const file = await req.file({ limits: { fileSize: STICKER_MAX_BYTES, files: 1 } });
     if (!file) throw new HttpError(400, '没有收到图片');
@@ -52,18 +42,30 @@ const stickerRoutes: FastifyPluginAsync = async (app) => {
     }
     if (file.file.truncated) throw new HttpError(400, '图片太大（上限 2MB）');
 
-    const url = `/media/${name}`;
-    const next = [url, ...stickers];
-    setSetting(KEY, next);
-    return reply.code(201).send({ url, stickers: next });
+    const sticker: StickerPublic = { url: `/media/${name}`, desc: '' };
+    const next = [sticker, ...stickers];
+    saveStickers(next);
+    return reply.code(201).send({ sticker, stickers: next });
+  });
+
+  // 改描述：AI 靠它决定什么时候发这张
+  app.patch('/', async (req) => {
+    const body = req.body as { url?: unknown; desc?: unknown };
+    if (typeof body.url !== 'string') throw new HttpError(400, '缺少 url');
+    const desc = typeof body.desc === 'string' ? body.desc.trim().slice(0, 60) : '';
+    const next = listStickers().map((item) =>
+      item.url === body.url ? { ...item, desc } : item,
+    );
+    saveStickers(next);
+    return { stickers: next };
   });
 
   // 只从列表里移除；已经发出去的聊天图片还要用这个文件，所以不删磁盘
   app.delete('/', async (req) => {
     const { url } = req.query as { url?: string };
     if (!url) throw new HttpError(400, '缺少 url');
-    const next = listStickers().filter((item) => item !== url);
-    setSetting(KEY, next);
+    const next = listStickers().filter((item) => item.url !== url);
+    saveStickers(next);
     return { stickers: next };
   });
 };

@@ -18,6 +18,7 @@ export interface ChatRow {
   character_id: string | null;
   user_name: string;
   user_persona: string;
+  background: string;
   last_message_at: number | null;
   unread_count: number;
   created_at: number;
@@ -121,6 +122,7 @@ function toChatPublic(row: ChatJoinRow): ChatPublic {
     members: row.kind === 'group' ? getChatMembers(row.id) : [],
     userName: row.user_name ?? '',
     userPersona: row.user_persona ?? '',
+    background: row.background ?? '',
     lastMessage: row.last_message ?? '',
     lastMessageKind: row.last_message_kind ?? 'text',
     lastMessageAt: row.last_message_at,
@@ -273,7 +275,7 @@ export function deleteChat(id: string): boolean {
 /** 会话级「我」的身份；空串表示沿用全局 */
 export function updateChatIdentity(
   id: string,
-  patch: { userName?: string; userPersona?: string },
+  patch: { userName?: string; userPersona?: string; background?: string },
 ): ChatPublic | null {
   if (!getChatRow(id)) return null;
   const sets: string[] = [];
@@ -285,6 +287,10 @@ export function updateChatIdentity(
   if (patch.userPersona !== undefined) {
     sets.push('user_persona = ?');
     values.push(patch.userPersona);
+  }
+  if (patch.background !== undefined) {
+    sets.push('background = ?');
+    values.push(patch.background);
   }
   if (sets.length > 0) {
     values.push(id);

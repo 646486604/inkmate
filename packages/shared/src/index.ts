@@ -194,6 +194,8 @@ export interface ChatPublic {
   /** 这个会话里「我」的名字与人设；空串表示用全局默认 */
   userName: string;
   userPersona: string;
+  /** 聊天背景图 url；空串表示没设 */
+  background: string;
   lastMessage: string;
   lastMessageKind: MessageKind;
   lastMessageAt: number | null;
@@ -204,6 +206,8 @@ export interface ChatPublic {
 export const chatIdentitySchema = z.object({
   userName: z.string().trim().max(40, '名字最多 40 个字').optional(),
   userPersona: z.string().trim().max(4000, '身份设定最多 4000 个字').optional(),
+  /** 聊天背景图 url；空串表示清除 */
+  background: z.string().trim().max(1000).optional(),
 });
 export type ChatIdentityInput = z.infer<typeof chatIdentitySchema>;
 
@@ -214,6 +218,12 @@ export const profilePatchSchema = z.object({
 export type ProfilePatch = z.infer<typeof profilePatchSchema>;
 
 /** 表情包：上传到服务端，按 /media/<name> 的列表保存 */
+export interface StickerPublic {
+  url: string;
+  /** 给 AI 看的描述，例如「猫猫得意」；空串表示只能手动发 */
+  desc: string;
+}
+
 export const STICKER_MAX_COUNT = 80;
 export const STICKER_MAX_BYTES = 2 * 1024 * 1024;
 

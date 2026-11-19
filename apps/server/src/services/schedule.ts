@@ -33,6 +33,7 @@ import { resolveProviderForCharacter } from '../llm/resolve.js';
 import { maybeSummarize } from './memory.js';
 import { publish } from './events.js';
 import { sendPushToAll } from './push.js';
+import { getWeatherText } from './weather.js';
 
 interface LoggerLike {
   info: (obj: unknown, msg?: string) => void;
@@ -269,6 +270,8 @@ async function generatePlan(
       new Date(`${date}T12:00:00`).getDay()
     ];
 
+    const weather = await getWeatherText();
+
     const raw = await completeChat(
       config,
       [
@@ -292,6 +295,7 @@ async function generatePlan(
             `角色：${character.name}（${character.nickname || character.name}）`,
             `人设：${character.persona.slice(0, 2500) || '（无）'}`,
             `日期：${date} 星期${weekday}`,
+            weather ? `今天天气：${weather}（计划要配合天气，下雨就别安排户外）` : '',
             yesterday
               ? `昨天：${yesterday.summary || yesterday.mood || '（无摘要）'}`
               : '昨天：（没有记录）',

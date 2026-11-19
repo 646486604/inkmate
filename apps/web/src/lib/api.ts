@@ -25,6 +25,7 @@ import type {
   ProviderPatch,
   ProviderPublic,
   PublicUser,
+  StickerPublic,
   WorldBookEntryInput,
   WorldBookEntryPatch,
   WorldBookEntryPublic,
@@ -179,19 +180,30 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify(input),
     }),
-  stickers: () => request<{ stickers: string[] }>('/api/stickers'),
+  stickers: () => request<{ stickers: StickerPublic[] }>('/api/stickers'),
   addSticker: (file: File) => {
     const form = new FormData();
     form.append('file', file);
-    return request<{ url: string; stickers: string[] }>('/api/stickers', {
+    return request<{ sticker: StickerPublic; stickers: StickerPublic[] }>('/api/stickers', {
       method: 'POST',
       body: form,
       timeoutMs: UPLOAD_TIMEOUT_MS,
     });
   },
+  updateSticker: (url: string, desc: string) =>
+    request<{ stickers: StickerPublic[] }>('/api/stickers', {
+      method: 'PATCH',
+      body: JSON.stringify({ url, desc }),
+    }),
   removeSticker: (url: string) =>
-    request<{ stickers: string[] }>(`/api/stickers?url=${encodeURIComponent(url)}`, {
+    request<{ stickers: StickerPublic[] }>(`/api/stickers?url=${encodeURIComponent(url)}`, {
       method: 'DELETE',
+    }),
+  settings: () => request<{ weatherCity: string }>('/api/settings'),
+  updateSettings: (patch: { weatherCity?: string }) =>
+    request<{ weatherCity: string }>('/api/settings', {
+      method: 'PUT',
+      body: JSON.stringify(patch),
     }),
   messages: (id: string, options: { limit?: number; before?: number } = {}) => {
     const params = new URLSearchParams();

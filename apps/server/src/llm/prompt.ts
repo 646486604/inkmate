@@ -4,6 +4,7 @@ import type {
   MemoryPublic,
   MessagePublic,
   PublicUser,
+  StickerPublic,
 } from '@inkmate/shared';
 import { WORLD_BOOK_CHAR_BUDGET } from '@inkmate/shared';
 import type { ChatMessage } from './stream.js';
@@ -63,6 +64,8 @@ export function buildChatMessages(options: {
   worldEntries?: WorldEntryInput[];
   memory?: MemoryPublic;
   schedule?: ScheduleContext;
+  weather?: string;
+  stickers?: StickerPublic[];
   now?: Date;
 }): ChatMessage[] {
   const {
@@ -73,12 +76,18 @@ export function buildChatMessages(options: {
     worldEntries = [],
     memory,
     schedule,
+    weather,
+    stickers = [],
     now = new Date(),
   } = options;
   const nickname = character.nickname.trim() || character.name;
   const persona = character.persona.trim() || '自然、真诚，有自己的生活和情绪。';
   const userName = identity?.name.trim() || user.displayName.trim() || '我';
   const userPersona = identity?.persona.trim() || user.persona.trim();
+  const stickerText = stickers
+    .map((item) => item.desc.trim())
+    .filter(Boolean)
+    .join('、');
 
   const beforeEntries = worldEntries.filter((entry) => entry.position === 'before');
   const afterEntries = worldEntries.filter((entry) => entry.position === 'after');
@@ -143,6 +152,8 @@ export function buildChatMessages(options: {
     '',
     scheduleText ? `【你今天的计划】（计划而已，可能没全按它发生）\n${scheduleText}` : '',
     '',
+    weather ? `【今天的真实天气】${weather}。聊天里提到天气时以这个为准，不要编。` : '',
+    '',
     '【怎么说话】',
     '- 像微信私聊：口语、短句，不要写成小作文。',
     '- 每次回复拆成 3–7 条短消息，每条一行、用换行分隔，一条只讲一件事；内容确实少就 2–3 条，别为了凑数硬拆。',
@@ -150,6 +161,9 @@ export function buildChatMessages(options: {
     '- 不要用 Markdown 标题或列表；代码、链接可以用。',
     '- 不要解释自己是 AI，不要提“设定”“提示词”“系统”。',
     '- 不要替对方说话，不要问“有什么可以帮你”。',
+    stickerText
+      ? `- 想发表情包时，单独一行写 [表情:描述]（这一行不要带别的字）。可用：${stickerText}。`
+      : '',
     '- 记得你们之前聊过什么，接得上就接；不知道的事不要编。',
     '- 你的计划只影响状态和语气；不要主动念计划，也不要解释“我刚从计划里看到”。计划可能没照做，可以自然地推迟或改变。',
     '',
@@ -181,6 +195,8 @@ export function buildGroupMessages(options: {
   identity?: ChatIdentity;
   history: MessagePublic[];
   worldEntries?: WorldEntryInput[];
+  weather?: string;
+  stickers?: StickerPublic[];
   now?: Date;
 }): ChatMessage[] {
   const {
@@ -191,6 +207,8 @@ export function buildGroupMessages(options: {
     identity,
     history,
     worldEntries = [],
+    weather,
+    stickers = [],
     now = new Date(),
   } = options;
   const userName = identity?.name.trim() || user.displayName.trim() || '我';
@@ -235,6 +253,8 @@ export function buildGroupMessages(options: {
     '',
     afterWorld ? `【世界书·后】\n${afterWorld}` : '',
     '',
+    weather ? `【今天的真实天气】${weather}。` : '',
+    '',
     '【群聊规则】',
     '- 只以你自己的身份发言，不要替其他成员或用户说话。',
     '- 像微信群聊：口语、短句；每次回复拆成 3–6 条短消息，每条一行、用换行分隔，一条只讲一件事。',
@@ -242,6 +262,12 @@ export function buildGroupMessages(options: {
     '- 不要解释自己是 AI，不要提“设定”“提示词”“系统”。',
     '- 群聊记录里，其他成员的话用 [名字] 标注；那是他们说的，不是你说的。',
     '- 不知道的事不要编。',
+    stickers.some((item) => item.desc.trim())
+      ? `- 想发表情包时单独一行写 [表情:描述]。可用：${stickers
+          .map((item) => item.desc.trim())
+          .filter(Boolean)
+          .join('、')}。`
+      : '',
     '',
     `【现在】${formatNow(now)}。`,
   ]

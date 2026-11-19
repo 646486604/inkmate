@@ -3,6 +3,7 @@ import {
   useRef,
   useState,
   type ChangeEvent,
+  type CSSProperties,
   type KeyboardEvent,
 } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -30,7 +31,7 @@ import {
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import type { ChatMemberPublic, ChatPublic, MessagePublic } from '@inkmate/shared';
+import type { ChatMemberPublic, ChatPublic, MessagePublic, StickerPublic } from '@inkmate/shared';
 import { api, ApiError } from '../lib/api';
 import { streamAssistant } from '../lib/chat-stream';
 import { useAuth } from '../lib/auth';
@@ -116,12 +117,14 @@ export function ChatRoomPage() {
   const [uploading, setUploading] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [stickerTab, setStickerTab] = useState<'emoji' | 'sticker'>('emoji');
-  const [stickers, setStickers] = useState<string[]>([]);
+  const [stickers, setStickers] = useState<StickerPublic[]>([]);
   const [stickerBusy, setStickerBusy] = useState(false);
   const [identityOpen, setIdentityOpen] = useState(false);
   const [identityName, setIdentityName] = useState('');
   const [identityPersona, setIdentityPersona] = useState('');
   const [identityBusy, setIdentityBusy] = useState(false);
+  const [bgOpen, setBgOpen] = useState(false);
+  const [bgBusy, setBgBusy] = useState(false);
   const [actionId, setActionId] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
@@ -131,6 +134,7 @@ export function ChatRoomPage() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const stickerRef = useRef<HTMLInputElement>(null);
+  const bgRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -279,6 +283,7 @@ export function ChatRoomPage() {
             setStreaming((current) =>
               current ? { ...current, text: current.text + text } : current,
             ),
+          onMessage: (message) => setMessages((current) => upsert(current, message)),
           onDone: (data) => {
             setMessages((current) => upsert(current, data.message));
             if (data.error) setError(data.error);
@@ -331,6 +336,7 @@ export function ChatRoomPage() {
               setStreaming((current) =>
                 current ? { ...current, text: current.text + text } : current,
               ),
+            onMessage: (message) => setMessages((current) => upsert(current, message)),
             onDone: (data) => {
               setMessages((current) => upsert(current, data.message));
               if (data.error) setError(data.error);
@@ -389,6 +395,7 @@ export function ChatRoomPage() {
             setStreaming((current) =>
               current ? { ...current, text: current.text + text } : current,
             ),
+          onMessage: (message) => setMessages((current) => upsert(current, message)),
           onDone: (data) => {
             setMessages((current) => upsert(current, data.message));
             if (data.error) setError(data.error);
@@ -483,10 +490,63 @@ export function ChatRoomPage() {
     try {
       const result = await api.addSticker(file);
       setStickers(result.stickers);
+      const desc = window.prompt(
+        '给这张表情写个描述，AI 靠它决定什么时候发（例如：猫猫得意）',
+        '',
+      );
+      if (desc && desc.trim()) {
+        const updated = await api.updateSticker(result.sticker.url, desc.trim());
+        setStickers(updated.stickers);
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '表情包上传失败');
     } finally {
       setStickerBusy(false);
+    }
+  }
+
+  async function editStickerDesc(sticker: StickerPublic) {
+    const next = window.prompt(
+      '描述（AI 靠它决定何时发；留空表示只给你手动发）',
+      sticker.desc,
+    );
+    if (next === null) return;
+    try {
+      const result = await api.updateSticker(sticker.url, next.trim());
+      setStickers(result.stickers);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '保存描述失败');
+    }
+  }
+
+  async function setChatBackground(url: string) {
+    if (!id) return;
+    setBgBusy(true);
+    setError('');
+    try {
+      const result = await api.updateChat(id, { background: url });
+      setChat(result.chat);
+      setBgOpen(false);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '设置背景失败');
+    } finally {
+      setBgBusy(false);
+    }
+  }
+
+  async function uploadBackground(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (event.target) event.target.value = '';
+    if (!file) return;
+    setBgBusy(true);
+    setError('');
+    try {
+      const uploaded = await api.upload(file);
+      await setChatBackground(uploaded.url);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '背景上传失败');
+    } finally {
+      setBgBusy(false);
     }
   }
 
@@ -599,6 +659,16 @@ export function ChatRoomPage() {
               </button>
               <button
                 className="block w-full rounded-lg px-3 py-2 text-left hover:bg-[var(--accent-soft)]"
+                onClick={() => {
+                  setBgOpen(true);
+                  setMenuOpen(false);
+                }}
+              >
+                <ImagePlus size={12} className="mr-1.5 inline" />
+                聊天背景
+              </button>
+              <button
+                className="block w-full rounded-lg px-3 py-2 text-left hover:bg-[var(--accent-soft)]"
                 onClick={() => navigate('/characters')}
               >
                 角色设置
@@ -648,7 +718,15 @@ export function ChatRoomPage() {
         </div>
       ) : null}
 
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4">
+      <div
+        ref={scrollRef}
+        className={`flex-1 overflow-y-auto px-4 py-4 ${chat?.background ? 'chat-bg' : ''}`}
+        style={
+          chat?.background
+            ? ({ '--chat-bg-image': `url(${chat.background})` } as CSSProperties)
+            : undefined
+        }
+      >
         {hasMore ? (
           <div className="mb-4 text-center">
             <button
@@ -978,25 +1056,38 @@ export function ChatRoomPage() {
               </p>
             ) : (
               <div className="grid max-h-56 grid-cols-5 gap-2 overflow-y-auto">
-                {stickers.map((url) => (
-                  <div key={url} className="relative">
+                {stickers.map((sticker) => (
+                  <div key={sticker.url} className="relative">
                     <button
                       className="block w-full overflow-hidden rounded-xl border border-[var(--line)]"
                       onClick={() => {
                         setEmojiOpen(false);
-                        void sendImage(url);
+                        void sendImage(sticker.url);
                       }}
                       aria-label="发送表情"
+                      title={sticker.desc || '还没写描述，AI 不会主动发这张'}
                     >
-                      <img src={url} alt="" className="h-16 w-full object-cover" />
+                      <img src={sticker.url} alt="" className="h-16 w-full object-cover" />
+                    </button>
+                    <button
+                      className="absolute -left-1 -top-1 grid h-5 w-5 place-items-center rounded-full bg-black/60 text-[9px] text-white"
+                      onClick={() => void editStickerDesc(sticker)}
+                      aria-label="编辑描述"
+                    >
+                      ✎
                     </button>
                     <button
                       className="absolute -right-1 -top-1 grid h-5 w-5 place-items-center rounded-full bg-black/60 text-white"
-                      onClick={() => void removeSticker(url)}
+                      onClick={() => void removeSticker(sticker.url)}
                       aria-label="删除表情"
                     >
                       <X size={11} />
                     </button>
+                    {sticker.desc ? (
+                      <span className="mt-0.5 block truncate text-[8px] text-[var(--faint)]">
+                        {sticker.desc}
+                      </span>
+                    ) : null}
                   </div>
                 ))}
               </div>
@@ -1080,6 +1171,66 @@ export function ChatRoomPage() {
           )}
         </div>
       </div>
+
+      {bgOpen ? (
+        <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/40 px-4 pb-4 sm:items-center">
+          <div className="card-solid w-full max-w-[420px] p-5">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-[13px] font-medium">聊天背景</p>
+                <p className="mt-1 text-[10px] text-[var(--faint)]">只对这个会话生效</p>
+              </div>
+              <button
+                className="btn btn-quiet h-8 min-h-8 px-2"
+                onClick={() => setBgOpen(false)}
+              >
+                <X size={16} />
+              </button>
+            </div>
+            {chat?.background ? (
+              <img
+                src={chat.background}
+                alt=""
+                className="mt-3 h-32 w-full rounded-xl object-cover"
+              />
+            ) : (
+              <p className="mt-3 rounded-xl border border-dashed border-[var(--line-strong)] px-3 py-6 text-center text-[10px] text-[var(--faint)]">
+                还没有设置背景
+              </p>
+            )}
+            <div className="mt-3 flex gap-2">
+              <button
+                className="btn btn-primary h-9 min-h-9 flex-1 text-[11px]"
+                disabled={bgBusy}
+                onClick={() => bgRef.current?.click()}
+              >
+                {bgBusy ? (
+                  <Loader2 size={12} className="animate-spin" />
+                ) : (
+                  <ImagePlus size={12} />
+                )}
+                {chat?.background ? '换一张' : '上传背景'}
+              </button>
+              {chat?.background ? (
+                <button
+                  className="btn btn-ghost h-9 min-h-9 px-3 text-[11px]"
+                  disabled={bgBusy}
+                  onClick={() => void setChatBackground('')}
+                >
+                  清除
+                </button>
+              ) : null}
+            </div>
+            <input
+              ref={bgRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif,image/avif"
+              className="hidden"
+              onChange={uploadBackground}
+            />
+          </div>
+        </div>
+      ) : null}
 
       {identityOpen ? (
         <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/40 px-4 pb-4 sm:items-center">

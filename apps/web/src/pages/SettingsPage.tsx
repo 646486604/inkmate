@@ -4,6 +4,7 @@ import {
   Bell,
   BellOff,
   BookOpen,
+  CloudSun,
   Database,
   Download,
   KeyRound,
@@ -62,7 +63,34 @@ export function SettingsPage() {
   const [profileName, setProfileName] = useState('');
   const [profilePersona, setProfilePersona] = useState('');
   const [profileBusy, setProfileBusy] = useState(false);
+  const [weatherCity, setWeatherCity] = useState('');
+  const [weatherSaving, setWeatherSaving] = useState(false);
   const backupInput = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    void api
+      .settings()
+      .then((result) => setWeatherCity(result.weatherCity))
+      .catch(() => undefined);
+  }, []);
+
+  async function saveWeatherCity() {
+    if (weatherSaving) return;
+    setWeatherSaving(true);
+    setError('');
+    setNotice('');
+    try {
+      const result = await api.updateSettings({ weatherCity: weatherCity.trim() });
+      setWeatherCity(result.weatherCity);
+      setNotice(
+        result.weatherCity ? `天气城市：${result.weatherCity}` : '已清除天气城市',
+      );
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '保存天气城市失败');
+    } finally {
+      setWeatherSaving(false);
+    }
+  }
 
   useEffect(() => {
     if (!user) return;
@@ -217,6 +245,37 @@ export function SettingsPage() {
           {notice}
         </div>
       ) : null}
+
+      <section className="card p-4">
+        <div className="flex items-start gap-3">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-2xl bg-[var(--paper-strong)] text-[var(--accent)]">
+            <CloudSun size={16} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[13px] font-medium">天气</p>
+            <p className="mt-1 text-[10px] leading-relaxed text-[var(--faint)]">
+              填城市名，计划生成和聊天里会带上当地真实天气（Open-Meteo，免 key）。
+            </p>
+            <div className="mt-3 flex gap-2">
+              <input
+                className="field flex-1"
+                value={weatherCity}
+                onChange={(event) => setWeatherCity(event.target.value)}
+                placeholder="例如：杭州"
+                maxLength={60}
+              />
+              <button
+                className="btn btn-primary h-10 min-h-10 px-3 text-[11px]"
+                disabled={weatherSaving}
+                onClick={() => void saveWeatherCity()}
+              >
+                {weatherSaving ? <Loader2 size={12} className="animate-spin" /> : null}
+                保存
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
 
       <section className="card p-4">
         <div className="flex items-start gap-3">

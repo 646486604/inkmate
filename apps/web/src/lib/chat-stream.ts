@@ -18,6 +18,8 @@ export interface StreamDone {
 export interface StreamHandlers {
   onStart?: (data: StreamStart) => void;
   onDelta?: (text: string) => void;
+  /** 一条回复可能落成多条消息（文字 + 表情包） */
+  onMessage?: (message: MessagePublic) => void;
   onDone?: (data: StreamDone) => void;
   onError?: (message: string) => void;
 }
@@ -89,6 +91,8 @@ export async function streamAssistant(
       handlers.onStart?.(data as StreamStart);
     } else if (event === 'delta') {
       if (payload.text) handlers.onDelta?.(payload.text);
+    } else if (event === 'message') {
+      if (payload.message) handlers.onMessage?.(payload.message);
     } else if (event === 'done') {
       if (payload.message) {
         handlers.onDone?.({
