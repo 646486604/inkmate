@@ -311,8 +311,9 @@ export function ChatRoomPage() {
     ].slice(0, 10);
     if (batch.length === 0) return;
 
-    setInput('');
     setEmojiOpen(false);
+    // 发出去之前先不丢输入框里的内容：失败时还能直接再点发送
+    let insertedCount = 0;
     const controller = beginStream();
     try {
       await streamAssistant(
@@ -332,6 +333,7 @@ export function ChatRoomPage() {
         {
           onStart: (data) => {
             const inserted = data.userMessages ?? (data.userMessage ? [data.userMessage] : []);
+            insertedCount = inserted.length;
             if (inserted.length > 0) {
               setMessages((current) => inserted.reduce((acc, message) => upsert(acc, message), current));
             }
@@ -347,11 +349,19 @@ export function ChatRoomPage() {
           onMessage: (message) => setMessages((current) => upsert(current, message)),
           onDone: (data) => {
             if (data.message) setMessages((current) => upsert(current, data.message!));
-            if (data.error) setError(data.error);
+            if (data.error) {
+              setError(data.error);
+              // 没落库就把待发还回去，已落库则保留输入框内容，方便重发/改写
+              if (insertedCount === 0) setPending(batch);
+            } else {
+              setInput('');
+              setPending([]);
+            }
             finishStream();
           },
           onError: (message) => {
             setError(message);
+            if (insertedCount === 0) setPending(batch);
             finishStream();
             void refreshMessages();
           },
@@ -361,7 +371,7 @@ export function ChatRoomPage() {
     } catch (err) {
       if (!controller.signal.aborted) {
         setError(err instanceof ApiError ? err.message : '发送失败');
-        setPending(batch);
+        if (insertedCount === 0) setPending(batch);
       }
       finishStream();
     }
