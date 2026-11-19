@@ -429,7 +429,13 @@ export function ChatRoomPage() {
   }
 
   async function removeMessage(message: MessagePublic) {
-    if (!window.confirm('删除这条消息？')) return;
+    if (
+      !window.confirm(
+        '删除这条消息？\n这个会话的长期记忆也会一起清空，之后不会再从记忆里带到它。',
+      )
+    ) {
+      return;
+    }
     try {
       await api.deleteMessage(message.id);
       setMessages((current) => current.filter((item) => item.id !== message.id));
@@ -462,7 +468,13 @@ export function ChatRoomPage() {
   }
 
   async function deleteBubble(message: MessagePublic, lineIndex: number) {
-    if (!window.confirm('删掉这条气泡？只删这一条，其余不动。')) return;
+    if (
+      !window.confirm(
+        '删掉这条气泡？只删这一条，其余不动。\n这个会话的长期记忆也会一起清空，之后不会再从记忆里带到这段。',
+      )
+    ) {
+      return;
+    }
     const lines = message.content.split('\n');
     lines.splice(lineIndex, 1);
     const content = lines.join('\n').trim();
@@ -472,7 +484,7 @@ export function ChatRoomPage() {
         setMessages((list) => list.filter((item) => item.id !== message.id));
         setActionId(null);
       } else {
-        const result = await api.editMessage(message.id, content);
+        const result = await api.editMessage(message.id, content, { resetMemory: true });
         setMessages((list) => upsert(list, result.message));
       }
     } catch (err) {

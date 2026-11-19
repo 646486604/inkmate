@@ -220,10 +220,10 @@ export const api = {
     request<void>(`/api/chats/${id}/read`, { method: 'POST' }),
   deleteChat: (id: string) =>
     request<void>(`/api/chats/${id}`, { method: 'DELETE' }),
-  editMessage: (id: string, content: string) =>
+  editMessage: (id: string, content: string, options: { resetMemory?: boolean } = {}) =>
     request<{ message: MessagePublic }>(`/api/messages/${id}`, {
       method: 'PATCH',
-      body: JSON.stringify({ content }),
+      body: JSON.stringify({ content, resetMemory: options.resetMemory }),
     }),
   deleteMessage: (id: string) =>
     request<{ message: MessagePublic }>(`/api/messages/${id}`, { method: 'DELETE' }),

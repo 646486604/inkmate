@@ -244,6 +244,8 @@ export type SendBatchInput = z.infer<typeof sendBatchSchema>;
 
 export const editMessageSchema = z.object({
   content: z.string().trim().min(1, '消息不能为空').max(8000),
+  /** 删掉某个气泡时置 true：连同这个会话的长期记忆一起清掉，别让被删的剧情留在摘要里 */
+  resetMemory: z.boolean().optional(),
 });
 export type EditMessageInput = z.infer<typeof editMessageSchema>;
 
