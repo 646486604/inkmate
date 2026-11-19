@@ -36,4 +36,5 @@ export function migrate(db: DatabaseSync): void {
   addColumn(db, 'chats', 'user_name', "TEXT NOT NULL DEFAULT ''");
   addColumn(db, 'chats', 'user_persona', "TEXT NOT NULL DEFAULT ''");
   addColumn(db, 'chats', 'background', "TEXT NOT NULL DEFAULT ''");
+  addColumn(db, 'chats', 'bubble_json', "TEXT NOT NULL DEFAULT ''");
 }

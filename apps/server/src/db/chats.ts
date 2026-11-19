@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type {
+  ChatBubbleStyle,
   ChatMemberPublic,
   ChatPublic,
   CharacterPublic,
@@ -19,6 +20,7 @@ export interface ChatRow {
   user_name: string;
   user_persona: string;
   background: string;
+  bubble_json: string;
   last_message_at: number | null;
   unread_count: number;
   created_at: number;
@@ -109,6 +111,27 @@ export function toMessagePublic(row: MessageRow): MessagePublic {
   };
 }
 
+function parseBubble(json: string | undefined): ChatBubbleStyle | null {
+  if (!json) return null;
+  try {
+    const value = JSON.parse(json) as Partial<ChatBubbleStyle>;
+    if (
+      typeof value?.mineColor !== 'string' ||
+      typeof value?.otherColor !== 'string' ||
+      typeof value?.alpha !== 'number'
+    ) {
+      return null;
+    }
+    return {
+      mineColor: value.mineColor,
+      otherColor: value.otherColor,
+      alpha: Math.min(1, Math.max(0.35, value.alpha)),
+    };
+  } catch {
+    return null;
+  }
+}
+
 function toChatPublic(row: ChatJoinRow): ChatPublic {
   return {
     id: row.id,
@@ -123,6 +146,7 @@ function toChatPublic(row: ChatJoinRow): ChatPublic {
     userName: row.user_name ?? '',
     userPersona: row.user_persona ?? '',
     background: row.background ?? '',
+    bubble: parseBubble(row.bubble_json),
     lastMessage: row.last_message ?? '',
     lastMessageKind: row.last_message_kind ?? 'text',
     lastMessageAt: row.last_message_at,
@@ -275,7 +299,12 @@ export function deleteChat(id: string): boolean {
 /** 会话级「我」的身份；空串表示沿用全局 */
 export function updateChatIdentity(
   id: string,
-  patch: { userName?: string; userPersona?: string; background?: string },
+  patch: {
+    userName?: string;
+    userPersona?: string;
+    background?: string;
+    bubble?: ChatBubbleStyle | null;
+  },
 ): ChatPublic | null {
   if (!getChatRow(id)) return null;
   const sets: string[] = [];
@@ -291,6 +320,10 @@ export function updateChatIdentity(
   if (patch.background !== undefined) {
     sets.push('background = ?');
     values.push(patch.background);
+  }
+  if (patch.bubble !== undefined) {
+    sets.push('bubble_json = ?');
+    values.push(patch.bubble === null ? '' : JSON.stringify(patch.bubble));
   }
   if (sets.length > 0) {
     values.push(id);

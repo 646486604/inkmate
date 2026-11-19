@@ -196,6 +196,8 @@ export interface ChatPublic {
   userPersona: string;
   /** 聊天背景图 url；空串表示没设 */
   background: string;
+  /** 会话级气泡样式；null 表示用全局默认 */
+  bubble: ChatBubbleStyle | null;
   lastMessage: string;
   lastMessageKind: MessageKind;
   lastMessageAt: number | null;
@@ -203,11 +205,32 @@ export interface ChatPublic {
   createdAt: number;
 }
 
+/** 单个会话的气泡样式；没设置就用外观里的全局默认 */
+export interface ChatBubbleStyle {
+  mineColor: string;
+  otherColor: string;
+  alpha: number;
+}
+
+const hexColorSchema = z
+  .string()
+  .trim()
+  .regex(/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/, '颜色要写成 #rrggbb');
+
 export const chatIdentitySchema = z.object({
   userName: z.string().trim().max(40, '名字最多 40 个字').optional(),
   userPersona: z.string().trim().max(4000, '身份设定最多 4000 个字').optional(),
   /** 聊天背景图 url；空串表示清除 */
   background: z.string().trim().max(1000).optional(),
+  /** 会话级气泡样式；null 表示恢复全局默认 */
+  bubble: z
+    .object({
+      mineColor: hexColorSchema,
+      otherColor: hexColorSchema,
+      alpha: z.number().min(0.35).max(1),
+    })
+    .nullable()
+    .optional(),
 });
 export type ChatIdentityInput = z.infer<typeof chatIdentitySchema>;
 

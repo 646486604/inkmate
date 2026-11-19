@@ -35,7 +35,13 @@ import {
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import type { ChatMemberPublic, ChatPublic, MessagePublic, StickerPublic } from '@inkmate/shared';
+import type {
+  ChatBubbleStyle,
+  ChatMemberPublic,
+  ChatPublic,
+  MessagePublic,
+  StickerPublic,
+} from '@inkmate/shared';
 import { api, ApiError } from '../lib/api';
 import { streamAssistant } from '../lib/chat-stream';
 import { useAuth } from '../lib/auth';
@@ -43,6 +49,7 @@ import { subscribeProactive } from '../lib/events';
 import { useMusicPlayer } from '../lib/music-player';
 import { MemoryPanel } from '../components/MemoryPanel';
 import { SchedulePanel } from '../components/SchedulePanel';
+import { applyBubbleStyle, bubblePreviewStyle, getBubbleStyle } from '../lib/appearance';
 
 const EMOJIS = [
   '😀', '😊', '🥺', '😭', '😡', '🙃', '😴', '🤔',
@@ -147,6 +154,9 @@ export function ChatRoomPage() {
   const [identityBusy, setIdentityBusy] = useState(false);
   const [bgOpen, setBgOpen] = useState(false);
   const [bgBusy, setBgBusy] = useState(false);
+  const [bubbleOpen, setBubbleOpen] = useState(false);
+  const [bubbleDraft, setBubbleDraft] = useState(() => getBubbleStyle());
+  const [bubbleBusy, setBubbleBusy] = useState(false);
   const [actionId, setActionId] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
@@ -171,6 +181,19 @@ export function ChatRoomPage() {
       alive = false;
     };
   }, []);
+
+  // 会话有自己的气泡样式就用它，没有就退回全局默认；离开会话恢复全局
+  useEffect(() => {
+    if (!chat) return;
+    applyBubbleStyle(chat.bubble ?? getBubbleStyle());
+  }, [chat?.id, chat?.bubble]);
+
+  useEffect(
+    () => () => {
+      applyBubbleStyle(getBubbleStyle());
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!id) return;
@@ -664,6 +687,27 @@ export function ChatRoomPage() {
     }
   }
 
+  function openBubbleStyle() {
+    setBubbleDraft(chat?.bubble ?? getBubbleStyle());
+    setBubbleOpen(true);
+    setMenuOpen(false);
+  }
+
+  async function saveBubbleStyle(style: ChatBubbleStyle | null) {
+    if (!id || bubbleBusy) return;
+    setBubbleBusy(true);
+    setError('');
+    try {
+      const result = await api.updateChat(id, { bubble: style });
+      setChat(result.chat);
+      setBubbleOpen(false);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '保存气泡样式失败');
+    } finally {
+      setBubbleBusy(false);
+    }
+  }
+
   async function setChatBackground(url: string) {
     if (!id) return;
     setBgBusy(true);
@@ -811,6 +855,13 @@ export function ChatRoomPage() {
               >
                 <ImagePlus size={12} className="mr-1.5 inline" />
                 聊天背景
+              </button>
+              <button
+                className="block w-full rounded-lg px-3 py-2 text-left hover:bg-[var(--accent-soft)]"
+                onClick={openBubbleStyle}
+              >
+                <Smile size={12} className="mr-1.5 inline" />
+                气泡样式
               </button>
               <button
                 className="block w-full rounded-lg px-3 py-2 text-left hover:bg-[var(--accent-soft)]"
@@ -1442,8 +1493,104 @@ export function ChatRoomPage() {
         </div>
       </div>
 
-      {bgOpen ? (
+      {bubbleOpen ? (
         <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/40 px-4 pb-4 sm:items-center">
+          <div className="card-solid w-full max-w-[420px] p-5">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-[13px] font-medium">这个会话的气泡样式</p>
+                <p className="mt-1 text-[10px] text-[var(--faint)]">
+                  只影响这个会话，不改全局外观
+                </p>
+              </div>
+              <button
+                className="btn btn-quiet h-8 min-h-8 px-2"
+                onClick={() => setBubbleOpen(false)}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="mt-3 flex items-center gap-2 rounded-xl bg-[var(--paper-strong)] px-3 py-2">
+              <span
+                className="rounded-2xl rounded-bl-md px-2.5 py-1.5 text-[11px]"
+                style={bubblePreviewStyle(bubbleDraft.otherColor, bubbleDraft.alpha)}
+              >
+                在的
+              </span>
+              <span
+                className="ml-auto rounded-2xl rounded-br-md px-2.5 py-1.5 text-[11px]"
+                style={bubblePreviewStyle(bubbleDraft.mineColor, bubbleDraft.alpha)}
+              >
+                我到了
+              </span>
+            </div>
+
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <label className="flex items-center justify-between rounded-xl border border-[var(--line)] px-2.5 py-2 text-[10px] text-[var(--muted)]">
+                我的
+                <input
+                  type="color"
+                  value={bubbleDraft.mineColor}
+                  onChange={(event) =>
+                    setBubbleDraft({ ...bubbleDraft, mineColor: event.target.value })
+                  }
+                  className="h-6 w-8 cursor-pointer rounded border border-[var(--line)] bg-transparent"
+                />
+              </label>
+              <label className="flex items-center justify-between rounded-xl border border-[var(--line)] px-2.5 py-2 text-[10px] text-[var(--muted)]">
+                对方
+                <input
+                  type="color"
+                  value={bubbleDraft.otherColor}
+                  onChange={(event) =>
+                    setBubbleDraft({ ...bubbleDraft, otherColor: event.target.value })
+                  }
+                  className="h-6 w-8 cursor-pointer rounded border border-[var(--line)] bg-transparent"
+                />
+              </label>
+            </div>
+
+            <div className="mt-2">
+              <div className="flex items-center justify-between text-[9px] text-[var(--faint)]">
+                <span>不透明度</span>
+                <span className="tabular">{Math.round(bubbleDraft.alpha * 100)}%</span>
+              </div>
+              <input
+                type="range"
+                min={35}
+                max={100}
+                step={5}
+                value={Math.round(bubbleDraft.alpha * 100)}
+                onChange={(event) =>
+                  setBubbleDraft({ ...bubbleDraft, alpha: Number(event.target.value) / 100 })
+                }
+                className="mt-1 w-full accent-[var(--accent)]"
+              />
+            </div>
+
+            <div className="mt-3 flex gap-2">
+              <button
+                className="btn btn-primary h-9 min-h-9 flex-1 text-[11px]"
+                disabled={bubbleBusy}
+                onClick={() => void saveBubbleStyle(bubbleDraft)}
+              >
+                {bubbleBusy ? <Loader2 size={12} className="animate-spin" /> : null}
+                保存到这个会话
+              </button>
+              <button
+                className="btn btn-ghost h-9 min-h-9 px-3 text-[11px]"
+                disabled={bubbleBusy}
+                onClick={() => void saveBubbleStyle(null)}
+              >
+                用全局默认
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {bgOpen ? (        <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/40 px-4 pb-4 sm:items-center">
           <div className="card-solid w-full max-w-[420px] p-5">
             <div className="flex items-start justify-between">
               <div>

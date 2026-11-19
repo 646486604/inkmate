@@ -141,6 +141,20 @@ function readableText(hex: string): string {
   return luminance > 150 ? '27 22 18' : '255 250 242';
 }
 
+/** 给预览用的内联样式（和实际气泡算法一致） */
+export function bubblePreviewStyle(
+  color: string,
+  alpha: number,
+): { background: string; color: string } {
+  const triplet = hexToRgbTriplet(color);
+  const [r, g, b] = triplet.split(' ').map(Number);
+  const luminance = ((r ?? 0) * 299 + (g ?? 0) * 587 + (b ?? 0) * 114) / 1000;
+  return {
+    background: `rgb(${triplet} / ${clampAlpha(alpha)})`,
+    color: luminance > 150 ? 'rgb(27 22 18)' : 'rgb(255 250 242)',
+  };
+}
+
 export function applyBubbleStyle(style: BubbleStyle = getBubbleStyle()): void {
   const root = document.documentElement;
   root.style.setProperty('--bubble-mine-rgb', hexToRgbTriplet(style.mineColor));
