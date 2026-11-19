@@ -118,7 +118,7 @@ export function ChatRoomPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
   const [input, setInput] = useState('');
-  const [pending, setPending] = useState<string[]>([]);
+  const [pending, setPending] = useState<Array<{ kind: 'text' | 'image'; value: string }>>([]);
   const [editing, setEditing] = useState<{ id: string; content: string } | null>(null);
   const [streaming, setStreaming] = useState<{ text: string; createdAt: number } | null>(null);
   const [streamingSpeaker, setStreamingSpeaker] = useState<ChatMemberPublic | null>(null);
@@ -268,7 +268,11 @@ export function ChatRoomPage() {
       return;
     }
 
-    const batch = [...pending, input.trim()].filter(Boolean).slice(0, 10);
+    const trimmed = input.trim();
+    const batch = [
+      ...pending,
+      ...(trimmed ? [{ kind: 'text' as const, value: trimmed }] : []),
+    ].slice(0, 10);
     if (batch.length === 0) return;
 
     setInput('');
@@ -277,7 +281,7 @@ export function ChatRoomPage() {
     try {
       await streamAssistant(
         `/api/chats/${id}/messages/batch`,
-        { contents: batch },
+        { items: batch.map((item) => ({ kind: item.kind, content: item.value })) },
         {
           onStart: (data) => {
             const inserted = data.userMessages ?? (data.userMessage ? [data.userMessage] : []);
@@ -319,9 +323,18 @@ export function ChatRoomPage() {
   function queueMessage() {
     const text = input.trim();
     if (!text) return;
-    setPending((current) => [...current, text].slice(0, 10));
+    setPending((current) =>
+      [...current, { kind: 'text' as const, value: text }].slice(0, 10),
+    );
     setInput('');
     inputRef.current?.focus();
+  }
+
+  /** 表情包也先放进待发，和文字一起发 */
+  function queueSticker(url: string) {
+    setPending((current) =>
+      [...current, { kind: 'image' as const, value: url }].slice(0, 10),
+    );
   }
 
   async function sendImage(input: File | string) {
@@ -987,11 +1000,19 @@ export function ChatRoomPage() {
             );
           })}
 
-          {pending.map((text, index) => (
+          {pending.map((item, index) => (
             <div key={`pending-${index}`} className="flex justify-end">
               <div className="max-w-[78%]">
                 <div className="rounded-2xl rounded-br-md border border-dashed border-[var(--line-strong)] bg-[var(--paper-strong)] px-3.5 py-2.5 text-[13px] leading-relaxed text-[var(--muted)]">
-                  <span className="whitespace-pre-wrap break-words">{text}</span>
+                  {item.kind === 'image' ? (
+                    <img
+                      src={item.value}
+                      alt="待发表情"
+                      className="max-h-32 rounded-xl"
+                    />
+                  ) : (
+                    <span className="whitespace-pre-wrap break-words">{item.value}</span>
+                  )}
                 </div>
                 <button
                   className="mt-0.5 block w-full text-right text-[9px] text-[var(--faint)]"
@@ -1134,7 +1155,7 @@ export function ChatRoomPage() {
               </div>
             ) : stickers.length === 0 ? (
               <p className="py-4 text-center text-[10px] leading-relaxed text-[var(--faint)]">
-                还没有表情包。点右上角「上传」，选一张图（≤2MB），之后一点就发出去。
+                还没有表情包。点右上角「上传」，选一张图（≤2MB），之后点一下就加进待发。
               </p>
             ) : (
               <div className="grid max-h-56 grid-cols-5 gap-2 overflow-y-auto">
@@ -1142,11 +1163,8 @@ export function ChatRoomPage() {
                   <div key={sticker.url} className="relative">
                     <button
                       className="block w-full overflow-hidden rounded-xl border border-[var(--line)]"
-                      onClick={() => {
-                        setEmojiOpen(false);
-                        void sendImage(sticker.url);
-                      }}
-                      aria-label="发送表情"
+                      onClick={() => queueSticker(sticker.url)}
+                      aria-label="加入待发"
                       title={sticker.desc || '还没写描述，AI 不会主动发这张'}
                     >
                       <img src={sticker.url} alt="" className="h-16 w-full object-cover" />
@@ -1172,6 +1190,9 @@ export function ChatRoomPage() {
                     ) : null}
                   </div>
                 ))}
+                <p className="col-span-5 pt-1 text-center text-[9px] text-[var(--faint)]">
+                  点表情加入「待发」，右侧发送键一起发；文字和表情可以混着攒
+                </p>
               </div>
             )}
           </div>

@@ -168,16 +168,26 @@ const chatRoutes: FastifyPluginAsync = async (app) => {
     if (!req.user) throw new HttpError(401, '未登录');
 
     const input = sendBatchSchema.parse(req.body);
-    const userText = input.contents.join('\n');
+    const items =
+      input.items && input.items.length > 0
+        ? input.items
+        : (input.contents ?? []).map((content) => ({ kind: 'text' as const, content }));
+    const userText = items
+      .map((item) => (item.kind === 'image' ? '[图片]' : item.content))
+      .join('\n');
     resolveAssistantTarget({ chatId: id, userText });
 
-    const inserted = input.contents.map((content) =>
+    // 同一毫秒插入的多条消息会拿到相同的 created_at，排序就乱了；
+    // 这里按顺序给每一条留 1ms，保证「先攒的先显示」
+    const base = Date.now();
+    const inserted = items.map((item, index) =>
       insertMessage({
         chatId: id,
         role: 'user',
         senderId: req.user!.id,
-        kind: 'text',
-        content,
+        kind: item.kind,
+        content: item.content,
+        createdAt: base + index,
       }),
     );
     touchChat(id, 0);

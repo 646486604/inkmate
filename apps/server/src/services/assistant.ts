@@ -243,6 +243,8 @@ export async function streamAssistantReply(options: {
     }
 
     const savedMessages: MessagePublic[] = [];
+    // 同一毫秒插入的多条消息要保证顺序：文字在前、表情在后
+    let stamp = Date.now();
     if (parsed.text) {
       const textMessage = insertMessage({
         chatId,
@@ -250,7 +252,9 @@ export async function streamAssistantReply(options: {
         senderId: character.id,
         kind: 'text',
         content: parsed.text,
+        createdAt: stamp,
       });
+      stamp += 1;
       savedMessages.push(textMessage);
       saved = textMessage;
       event(reply, 'message', { message: textMessage });
@@ -262,7 +266,9 @@ export async function streamAssistantReply(options: {
         senderId: character.id,
         kind: 'image',
         content: sticker.url,
+        createdAt: stamp,
       });
+      stamp += 1;
       savedMessages.push(imageMessage);
       saved = imageMessage;
       event(reply, 'message', { message: imageMessage });

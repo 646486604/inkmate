@@ -233,13 +233,23 @@ export const sendMessageSchema = z.object({
 });
 export type SendMessageInput = z.infer<typeof sendMessageSchema>;
 
-/** 攒了几条一起发：一次插入多条用户消息，再生成一条回复 */
-export const sendBatchSchema = z.object({
-  contents: z
-    .array(z.string().trim().min(1, '消息不能为空').max(8000))
-    .min(1, '至少要有一条消息')
-    .max(10, '一次最多连发 10 条'),
+/** 攒了几条一起发：一次插入多条用户消息，再生成一条回复（文字/表情包可以混排） */
+export const sendBatchItemSchema = z.object({
+  kind: z.enum(['text', 'image']).optional().default('text'),
+  content: z.string().trim().min(1, '消息不能为空').max(8000),
 });
+export type SendBatchItem = z.infer<typeof sendBatchItemSchema>;
+
+export const sendBatchSchema = z
+  .object({
+    /** 老格式：纯文字列表 */
+    contents: z.array(z.string().trim().min(1, '消息不能为空').max(8000)).max(10).optional(),
+    /** 新格式：文字和表情包混排 */
+    items: z.array(sendBatchItemSchema).max(10).optional(),
+  })
+  .refine((value) => Boolean(value.items?.length || value.contents?.length), {
+    message: '至少要有一条消息',
+  });
 export type SendBatchInput = z.infer<typeof sendBatchSchema>;
 
 export const editMessageSchema = z.object({
