@@ -84,23 +84,6 @@ export function MemoryPanel({ chatId, onClose }: { chatId: string; onClose: () =
     }
   }
 
-  async function clearAll() {
-    if (
-      !window.confirm(
-        '清空这个会话的长期记忆（摘要 + 事实）？之后可以从剩下的消息重新整理，删掉的内容不会再回来。',
-      )
-    ) {
-      return;
-    }
-    setError('');
-    try {
-      const result = await api.clearMemory(chatId);
-      applyMemory(result.memory);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : '清空记忆失败');
-    }
-  }
-
   async function addFact() {
     const content = newFact.trim();
     if (!content) return;
@@ -204,12 +187,6 @@ export function MemoryPanel({ chatId, onClose }: { chatId: string; onClose: () =
                     <RefreshCw size={11} />
                   )}
                   立即整理
-                </button>
-                <button
-                  className="btn btn-ghost h-7 min-h-7 px-2 text-[10px] text-[var(--accent-strong)]"
-                  onClick={() => void clearAll()}
-                >
-                  清空记忆
                 </button>
               </div>
               <textarea
@@ -333,7 +310,7 @@ export function MemoryPanel({ chatId, onClose }: { chatId: string; onClose: () =
 
             <div className="flex items-start gap-2 rounded-xl bg-[var(--accent-soft)] px-3 py-2 text-[9px] leading-relaxed text-[var(--faint)]">
               <Sparkles size={12} className="mt-0.5 shrink-0 text-[var(--accent)]" />
-              自动整理每 20 条触一次，用当前角色的模型服务。整理失败不影响聊天。
+              自动整理每 20 条触一次，用当前角色的模型服务。摘要只记发生过的事，不重复人设；事实只记关系变动、人生轨迹这类值得记住的节点。整理失败不影响聊天。
             </div>
           </div>
         )}

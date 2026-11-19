@@ -30,7 +30,6 @@ import { HttpError } from '../lib/http-error.js';
 import { resolveAssistantTarget, streamAssistantReply } from '../services/assistant.js';
 import {
   countChatMessages,
-  clearMemory,
   createFact,
   getMemory,
   upsertSummary,
@@ -108,14 +107,6 @@ const chatRoutes: FastifyPluginAsync = async (app) => {
     const input = summaryPatchSchema.parse(req.body);
     const summary = upsertSummary(id, input.summary, countChatMessages(id));
     return { summary };
-  });
-
-  // 手动清空长期记忆：删了聊天记录后，如果摘要里还带着，可以一键清掉
-  app.delete('/:id/memory', async (req) => {
-    const { id } = req.params as { id: string };
-    if (!getChatRow(id)) throw new HttpError(404, '会话不存在');
-    clearMemory(id);
-    return { memory: getMemory(id) };
   });
 
   app.post('/:id/facts', async (req, reply) => {
