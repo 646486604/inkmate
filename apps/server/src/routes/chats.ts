@@ -17,6 +17,7 @@ import {
   getChat,
   getChatRow,
   getLastAssistantMessage,
+  getLastMessage,
   getLastUserMessage,
   getMessage,
   insertMessage,
@@ -231,7 +232,14 @@ const chatRoutes: FastifyPluginAsync = async (app) => {
       throw new HttpError(404, '要重新生成的消息不存在');
     }
 
-    const target = input.messageId ? getMessage(input.messageId) : getLastAssistantMessage(id);
+    // 只有「最后一条就是 AI 消息」时才替换它；最后一条是用户消息（模型没回）时只补一条回复，
+    // 不能把更早那条 AI 消息当成替换目标
+    const lastMessage = getLastMessage(id);
+    const target = input.messageId
+      ? getMessage(input.messageId)
+      : lastMessage?.role === 'assistant'
+        ? lastMessage
+        : null;
     if (target && target.chatId !== id) throw new HttpError(400, '消息不属于该会话');
     if (target && target.role !== 'assistant') throw new HttpError(400, '只能重新生成 AI 消息');
     const lastAssistant = getLastAssistantMessage(id);

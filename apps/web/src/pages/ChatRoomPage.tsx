@@ -25,6 +25,7 @@ import {
   RefreshCw,
   SkipForward,
   Smile,
+  Sparkles,
   Square,
   Trash2,
   Type,
@@ -128,7 +129,6 @@ export function ChatRoomPage() {
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
-  const [canRetry, setCanRetry] = useState(false);
   const [input, setInput] = useState('');
   const [pending, setPending] = useState<
     Array<{
@@ -277,7 +277,6 @@ export function ChatRoomPage() {
     abortRef.current = controller;
     setSending(true);
     setError('');
-    setCanRetry(false);
     return controller;
   }
 
@@ -360,7 +359,6 @@ export function ChatRoomPage() {
                 // 已经发出去了，别再发一遍；给出「重试生成」
                 setInput('');
                 setPending([]);
-                setCanRetry(true);
               }
             } else {
               setInput('');
@@ -375,7 +373,6 @@ export function ChatRoomPage() {
             } else {
               setInput('');
               setPending([]);
-              setCanRetry(true);
             }
             finishStream();
             void refreshMessages();
@@ -390,7 +387,6 @@ export function ChatRoomPage() {
         else {
           setInput('');
           setPending([]);
-          setCanRetry(true);
         }
       }
       finishStream();
@@ -793,6 +789,11 @@ export function ChatRoomPage() {
   const lastAssistantId = [...messages]
     .reverse()
     .find((message) => message.role === 'assistant' && !message.deletedAt)?.id;
+  // 发送键兼当「唤醒」：没东西可发、但最后一条是自己的消息时，点它让 TA 接着说
+  const canSendNow = Boolean(input.trim()) || pending.length > 0;
+  const lastVisibleMessage = [...messages].reverse().find((message) => !message.deletedAt);
+  const needsReply =
+    !sending && !streaming && Boolean(lastVisibleMessage) && lastVisibleMessage?.role === 'user';
 
   if (loading) {
     return (
@@ -940,19 +941,6 @@ export function ChatRoomPage() {
       {error ? (
         <div className="mx-4 mt-2 flex items-start gap-2 rounded-xl border border-[var(--line)] bg-[var(--accent-soft)] px-3 py-2 text-[11px] leading-relaxed text-[var(--accent-strong)]">
           <span className="flex-1">{error}</span>
-          {canRetry ? (
-            <button
-              className="btn btn-ghost h-7 min-h-7 shrink-0 px-2 text-[10px]"
-              onClick={() => {
-                setCanRetry(false);
-                setError('');
-                void regenerate();
-              }}
-            >
-              <RefreshCw size={11} />
-              重试生成
-            </button>
-          ) : null}
           <button onClick={() => setError('')}>
             <X size={13} />
           </button>
@@ -1547,12 +1535,20 @@ export function ChatRoomPage() {
             </button>
           ) : (
             <button
-              className="btn btn-accent h-9 min-h-9 px-3"
-              onClick={() => void sendText()}
-              disabled={!input.trim() && pending.length === 0}
-              aria-label="发送"
+              className={`btn h-9 min-h-9 px-3 ${
+                canSendNow || needsReply ? 'btn-accent' : 'btn-ghost'
+              }`}
+              onClick={() => {
+                if (canSendNow) void sendText();
+                else if (needsReply) void regenerate();
+              }}
+              disabled={!canSendNow && !needsReply}
+              title={
+                canSendNow ? '发送' : needsReply ? '让 TA 接着说（重新生成回复）' : '发送'
+              }
+              aria-label={canSendNow ? '发送' : '让 TA 回复'}
             >
-              <ArrowUp size={18} />
+              {needsReply && !canSendNow ? <Sparkles size={17} /> : <ArrowUp size={18} />}
             </button>
           )}
         </div>
