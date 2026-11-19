@@ -144,7 +144,6 @@ export function ChatRoomPage() {
   const [streaming, setStreaming] = useState<{ text: string; createdAt: number } | null>(null);
   const [streamingSpeaker, setStreamingSpeaker] = useState<ChatMemberPublic | null>(null);
   const [sending, setSending] = useState(false);
-  const [uploading, setUploading] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [stickerTab, setStickerTab] = useState<'emoji' | 'sticker' | 'more'>('emoji');
   const [stickers, setStickers] = useState<StickerPublic[]>([]);
@@ -165,7 +164,6 @@ export function ChatRoomPage() {
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
   const stickerRef = useRef<HTMLInputElement>(null);
   const bgRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -418,7 +416,7 @@ export function ChatRoomPage() {
     );
   }
   function queueVoice() {
-    const text = window.prompt('语音里说什么？（文字演的，不会录音）', '');
+    const text = window.prompt('语音里说什么？', '');
     if (text === null) return;
     const content = text.trim() || '（语音）';
     const durationSeconds = Math.max(1, Math.min(60, Math.round(content.length / 4) || 1));
@@ -451,7 +449,7 @@ export function ChatRoomPage() {
   }
 
   function queueDescImage() {
-    const desc = window.prompt('这张「文字图」画的是什么？（例如：窗外的雨）', '');
+    const desc = window.prompt('这张图里是什么？（例如：窗外的雨）', '');
     if (desc === null) return;
     const content = desc.trim();
     if (!content) return;
@@ -459,56 +457,6 @@ export function ChatRoomPage() {
       [...current, { kind: 'desc-image' as const, value: content }].slice(0, 10),
     );
     setEmojiOpen(false);
-  }
-
-  async function sendImage(input: File | string, description?: string) {
-    if (!id || sending) return;
-    setUploading(typeof input !== 'string');
-    setError('');
-    try {
-      const uploadedUrl =
-        typeof input === 'string' ? input : (await api.upload(input)).url;
-      const controller = beginStream();
-      try {
-        await streamAssistant(
-          `/api/chats/${id}/messages`,
-          { content: uploadedUrl, kind: 'image', ...(description ? { description } : {}) },
-          {
-            onStart: (data) => {
-              if (data.userMessage) setMessages((current) => upsert(current, data.userMessage!));
-              setStreamingSpeaker(data.speaker ?? null);
-              setStreaming({ text: '', createdAt: data.createdAt });
-            },
-            onDelta: (text) =>
-              setStreaming((current) =>
-                current ? { ...current, text: current.text + text } : current,
-              ),
-            onMessage: (message) => setMessages((current) => upsert(current, message)),
-            onDone: (data) => {
-              if (data.message) setMessages((current) => upsert(current, data.message!));
-              if (data.error) setError(data.error);
-              finishStream();
-            },
-            onError: (message) => {
-              setError(message);
-              finishStream();
-              void refreshMessages();
-            },
-          },
-          controller.signal,
-        );
-      } catch (err) {
-        if (!controller.signal.aborted) {
-          setError(err instanceof ApiError ? err.message : '发送图片失败');
-        }
-        finishStream();
-      }
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : '上传失败');
-    } finally {
-      setUploading(false);
-      if (fileRef.current) fileRef.current.value = '';
-    }
   }
 
   function stop() {
@@ -524,8 +472,10 @@ export function ChatRoomPage() {
     setActionId(null);
     setMessages((current) => {
       if (messageId) return current.filter((message) => message.id !== messageId);
-      const lastAssistant = [...current].reverse().find((message) => message.role === 'assistant');
-      return lastAssistant ? current.filter((message) => message.id !== lastAssistant.id) : current;
+      // 只有最后一条确实是 AI 回复时才把它拿掉；最后一条是用户消息（模型没回）时什么都不删
+      const lastVisible = [...current].reverse().find((message) => !message.deletedAt);
+      if (lastVisible?.role !== 'assistant') return current;
+      return current.filter((message) => message.id !== lastVisible.id);
     });
     const controller = beginStream();
     setStreaming({ text: '', createdAt: Date.now() });
@@ -639,16 +589,6 @@ export function ChatRoomPage() {
     inputRef.current?.focus();
   }
 
-  function handleFile(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (event.target) event.target.value = '';
-    if (!file) return;
-    const description = window.prompt(
-      '给这张图写一句描述，让 TA 也能「看到」（可留空）',
-      '',
-    );
-    void sendImage(file, (description ?? '').trim());
-  }
 
   function openIdentity() {
     setIdentityName(chat?.userName || user?.displayName || '');
@@ -1067,8 +1007,7 @@ export function ChatRoomPage() {
                             {message.content}
                           </span>
                         ) : null}
-                        <span className="mt-0.5 block text-[8px] opacity-50">文字演的语音</span>
-                      </div>
+                          </div>
                     ) : message.kind === 'red-packet' ? (
                       <div className="w-44 rounded-xl bg-[#c94a3d] px-3 py-2.5 text-[#fff3e6]">
                         <div className="flex items-center gap-1.5 text-[11px] font-medium">
@@ -1081,7 +1020,6 @@ export function ChatRoomPage() {
                         <p className="mt-0.5 text-[10px] leading-relaxed opacity-85">
                           {message.content || '恭喜发财'}
                         </p>
-                        <p className="mt-1 text-[8px] opacity-60">假装拆开 · 不会真有钱</p>
                       </div>
                     ) : message.kind === 'desc-image' ? (
                       <div
@@ -1101,7 +1039,6 @@ export function ChatRoomPage() {
                             {message.content}
                           </span>
                         </div>
-                        <span className="mt-1 block text-[8px] opacity-60">文字图</span>
                       </div>
                     ) : message.kind === 'image' ? (
                       <div
@@ -1413,8 +1350,7 @@ export function ChatRoomPage() {
               <div className="grid grid-cols-2 gap-2">
                 {(
                   [
-                    { label: '图片', icon: ImagePlus, onClick: () => fileRef.current?.click() },
-                    { label: '文字图', icon: Type, onClick: queueDescImage },
+                    { label: '图片', icon: Type, onClick: queueDescImage },
                     { label: '语音', icon: Mic, onClick: queueVoice },
                     { label: '红包', icon: Gift, onClick: queueRedPacket },
                   ] as const
@@ -1425,7 +1361,7 @@ export function ChatRoomPage() {
                       key={action.label}
                       className="flex flex-col items-center gap-1.5 rounded-xl border border-[var(--line)] py-3 text-[10px] text-[var(--muted)] hover:bg-[var(--accent-soft)]"
                       onClick={action.onClick}
-                      disabled={uploading || sending}
+                      disabled={sending}
                     >
                       <Icon size={20} />
                       {action.label}
@@ -1433,7 +1369,7 @@ export function ChatRoomPage() {
                   );
                 })}
                 <p className="col-span-2 pt-1 text-center text-[9px] leading-relaxed text-[var(--faint)]">
-                  这些都会先进入「待发」，和文字一起发；语音和红包是文字演的，不会真录音、也不会真扣钱
+                  都会先进「待发」，和文字一起发
                 </p>
               </div>
             ) : stickers.length === 0 ? (
@@ -1493,14 +1429,6 @@ export function ChatRoomPage() {
             </button>
           </div>
         ) : null}
-
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/png,image/jpeg,image/webp,image/gif,image/avif"
-          className="hidden"
-          onChange={handleFile}
-        />
 
         <div className="flex items-end gap-2">
           <button
