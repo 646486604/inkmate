@@ -337,7 +337,7 @@ export function ChatRoomPage() {
     );
   }
 
-  async function sendImage(input: File | string) {
+  async function sendImage(input: File | string, description?: string) {
     if (!id || sending) return;
     setUploading(typeof input !== 'string');
     setError('');
@@ -348,7 +348,7 @@ export function ChatRoomPage() {
       try {
         await streamAssistant(
           `/api/chats/${id}/messages`,
-          { content: uploadedUrl, kind: 'image' },
+          { content: uploadedUrl, kind: 'image', ...(description ? { description } : {}) },
           {
             onStart: (data) => {
               if (data.userMessage) setMessages((current) => upsert(current, data.userMessage!));
@@ -442,13 +442,7 @@ export function ChatRoomPage() {
   }
 
   async function removeMessage(message: MessagePublic) {
-    if (
-      !window.confirm(
-        '删除这条消息？\n这个会话的长期记忆也会一起清空，之后不会再从记忆里带到它。',
-      )
-    ) {
-      return;
-    }
+    if (!window.confirm('删除这条消息？')) return;
     try {
       await api.deleteMessage(message.id);
       setMessages((current) => current.filter((item) => item.id !== message.id));
@@ -481,13 +475,7 @@ export function ChatRoomPage() {
   }
 
   async function deleteBubble(message: MessagePublic, lineIndex: number) {
-    if (
-      !window.confirm(
-        '删掉这条气泡？只删这一条，其余不动。\n这个会话的长期记忆也会一起清空，之后不会再从记忆里带到这段。',
-      )
-    ) {
-      return;
-    }
+    if (!window.confirm('删掉这条气泡？只删这一条，其余不动。')) return;
     const lines = message.content.split('\n');
     lines.splice(lineIndex, 1);
     const content = lines.join('\n').trim();
@@ -497,7 +485,7 @@ export function ChatRoomPage() {
         setMessages((list) => list.filter((item) => item.id !== message.id));
         setActionId(null);
       } else {
-        const result = await api.editMessage(message.id, content, { resetMemory: true });
+        const result = await api.editMessage(message.id, content);
         setMessages((list) => upsert(list, result.message));
       }
     } catch (err) {
@@ -529,7 +517,13 @@ export function ChatRoomPage() {
 
   function handleFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
-    if (file) void sendImage(file);
+    if (event.target) event.target.value = '';
+    if (!file) return;
+    const description = window.prompt(
+      '给这张图写一句描述，让 TA 也能「看到」（可留空）',
+      '',
+    );
+    void sendImage(file, (description ?? '').trim());
   }
 
   function openIdentity() {
@@ -887,7 +881,27 @@ export function ChatRoomPage() {
                     {isGroup && !mine ? (
                       <p className="mb-0.5 ml-0.5 text-[9px] text-[var(--faint)]">{speakerName}</p>
                     ) : null}
-                    {message.kind === 'image' ? (
+                    {message.kind === 'desc-image' ? (
+                      <div
+                        className={`relative ${
+                          mine
+                            ? grouped
+                              ? BUBBLE_MINE_FLAT
+                              : BUBBLE_MINE
+                            : grouped
+                              ? BUBBLE_OTHER_FLAT
+                              : BUBBLE_OTHER
+                        }`}
+                      >
+                        <div className="flex items-start gap-2">
+                          <ImagePlus size={13} className="mt-0.5 shrink-0 opacity-70" />
+                          <span className="whitespace-pre-wrap break-words">
+                            {message.content}
+                          </span>
+                        </div>
+                        <span className="mt-1 block text-[8px] opacity-60">文字图</span>
+                      </div>
+                    ) : message.kind === 'image' ? (
                       <div
                         className={`relative ${
                           mine
@@ -905,6 +919,12 @@ export function ChatRoomPage() {
                           className="max-h-64 max-w-full cursor-zoom-in rounded-xl"
                           onClick={() => window.open(message.content, '_blank')}
                         />
+                        {typeof message.meta?.description === 'string' &&
+                        message.meta.description ? (
+                          <span className="mt-1 block text-[9px] leading-relaxed opacity-70">
+                            {message.meta.description}
+                          </span>
+                        ) : null}
                       </div>
                     ) : mine ? (
                       <div className={`relative ${grouped ? BUBBLE_MINE_FLAT : BUBBLE_MINE}`}>

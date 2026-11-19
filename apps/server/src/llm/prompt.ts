@@ -42,13 +42,24 @@ function formatNow(date = new Date()): string {
   return `${date.getFullYear()}年${pad(date.getMonth() + 1)}月${pad(date.getDate())}日 星期${WEEKDAYS[date.getDay()]} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+/** 模型看不到真图片：图片一律用「[图片：描述]」这种文字替身表示 */
+function messageTextForPrompt(message: MessagePublic): string {
+  if (message.kind === 'desc-image') return `[图片：${message.content.trim()}]`;
+  if (message.kind === 'image') {
+    const desc =
+      typeof message.meta?.description === 'string' ? message.meta.description.trim() : '';
+    return desc ? `[图片：${desc}]` : '[图片]';
+  }
+  return message.content.trim();
+}
+
 function trimHistory(history: MessagePublic[]): MessagePublic[] {
   const picked: MessagePublic[] = [];
   let total = 0;
   for (let index = history.length - 1; index >= 0; index -= 1) {
     const message = history[index];
     if (!message) continue;
-    const content = message.kind === 'image' ? '[图片]' : message.content;
+    const content = messageTextForPrompt(message);
     if (picked.length > 0 && total + content.length > HISTORY_CHAR_BUDGET) break;
     picked.push(message);
     total += content.length;
@@ -164,6 +175,7 @@ export function buildChatMessages(options: {
     stickerText
       ? `- 想发表情包时，单独一行写 [表情:描述]（这一行不要带别的字）。可用：${stickerText}。`
       : '',
+    '- 想给对方看某个画面/照片时，单独一行写 [图片:具体描述]，比如 [图片:窗外的雨]；会显示成一张“文字图”。',
     '- 记得你们之前聊过什么，接得上就接；不知道的事不要编。',
     '- 你的计划只影响状态和语气；不要主动念计划，也不要解释“我刚从计划里看到”。计划可能没照做，可以自然地推迟或改变。',
     '',
@@ -176,8 +188,7 @@ export function buildChatMessages(options: {
   for (const message of trimHistory(history)) {
     if (message.deletedAt) continue;
     if (message.role !== 'user' && message.role !== 'assistant') continue;
-    const content =
-      message.kind === 'image' ? '[图片]' : message.content.trim();
+    const content = messageTextForPrompt(message);
     if (!content) continue;
     messages.push({
       role: message.role,
@@ -268,6 +279,7 @@ export function buildGroupMessages(options: {
           .filter(Boolean)
           .join('、')}。`
       : '',
+    '- 想分享画面时单独一行写 [图片:具体描述]，会显示成一张“文字图”。',
     '',
     `【现在】${formatNow(now)}。`,
   ]
@@ -278,7 +290,7 @@ export function buildGroupMessages(options: {
   for (const message of trimHistory(history)) {
     if (message.deletedAt) continue;
     if (message.role !== 'user' && message.role !== 'assistant') continue;
-    const content = message.kind === 'image' ? '[图片]' : message.content.trim();
+    const content = messageTextForPrompt(message);
     if (!content) continue;
     if (message.role === 'user') {
       messages.push({ role: 'user', content: `${userName}：${content}` });
@@ -385,7 +397,7 @@ export function buildProactiveMessages(options: {
   for (const message of trimHistory(history)) {
     if (message.deletedAt) continue;
     if (message.role !== 'user' && message.role !== 'assistant') continue;
-    const content = message.kind === 'image' ? '[图片]' : message.content.trim();
+    const content = messageTextForPrompt(message);
     if (!content) continue;
     messages.push({ role: message.role, content });
   }

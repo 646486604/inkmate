@@ -146,6 +146,7 @@ const chatRoutes: FastifyPluginAsync = async (app) => {
       senderId: req.user.id,
       kind: input.kind,
       content: input.content,
+      meta: input.description ? { description: input.description } : undefined,
     });
     touchChat(id, 0);
     markChatRead(id);
@@ -168,7 +169,11 @@ const chatRoutes: FastifyPluginAsync = async (app) => {
     if (!req.user) throw new HttpError(401, '未登录');
 
     const input = sendBatchSchema.parse(req.body);
-    const items =
+    const items: Array<{
+      kind: 'text' | 'image' | 'desc-image';
+      content: string;
+      description?: string;
+    }> =
       input.items && input.items.length > 0
         ? input.items
         : (input.contents ?? []).map((content) => ({ kind: 'text' as const, content }));
@@ -187,6 +192,7 @@ const chatRoutes: FastifyPluginAsync = async (app) => {
         senderId: req.user!.id,
         kind: item.kind,
         content: item.content,
+        meta: item.description ? { description: item.description } : undefined,
         createdAt: base + index,
       }),
     );

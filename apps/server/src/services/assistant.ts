@@ -28,34 +28,67 @@ import { listStickers, stickersForPrompt } from './stickers.js';
 
 const STICKER_LINE = /^\s*\[(?:表情|sticker)\s*[:：]\s*(.+?)\]\s*$/i;
 
-/** 把「[表情:猫猫得意]」这种标记换成要发的表情包，其余留给文字 */
-function parseStickerReply(
-  raw: string,
-  stickers: StickerPublic[],
-): { text: string; stickers: StickerPublic[] } {
-  const textLines: string[] = [];
-  const picked: StickerPublic[] = [];
+type ReplyPart =
+  | { type: 'text'; content: string }
+  | { type: 'sticker'; url: string }
+  | { type: 'descImage'; content: string };
+
+const IMAGE_LINE = /^\s*\[(?:图片|图像|照片|image)\s*[:：]\s*(.+?)\]\s*$/i;
+
+/**
+ * 模型看不到真图片，用文字替身：
+ * - [表情:描述] 换成表情包库里的图
+ * - [图片:描述] 变成一张“文字图”（这个角色描述的画面）
+ * 其余行按顺序保留成文字气泡。
+ */
+function parseReply(raw: string, stickers: StickerPublic[]): ReplyPart[] {
+  const parts: ReplyPart[] = [];
+  let buffer: string[] = [];
+  const flush = () => {
+    const text = buffer.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+    buffer = [];
+    if (text) parts.push({ type: 'text', content: text });
+  };
+
   for (const line of raw.split('\n')) {
-    const match = STICKER_LINE.exec(line);
-    if (!match) {
-      textLines.push(line);
+    const stickerMatch = STICKER_LINE.exec(line);
+    if (stickerMatch) {
+      const desc = stickerMatch[1]?.trim() ?? '';
+      const found =
+        stickers.find((item) => item.desc && item.desc === desc) ??
+        stickers.find(
+          (item) => item.desc && (item.desc.includes(desc) || desc.includes(item.desc)),
+        );
+      if (found) {
+        flush();
+        parts.push({ type: 'sticker', url: found.url });
+      }
       continue;
     }
-    const desc = match[1]?.trim() ?? '';
-    const found =
-      stickers.find((item) => item.desc && item.desc === desc) ??
-      stickers.find(
-        (item) => item.desc && (item.desc.includes(desc) || desc.includes(item.desc)),
-      );
-    if (found) picked.push(found);
+    const imageMatch = IMAGE_LINE.exec(line);
+    if (imageMatch) {
+      flush();
+      parts.push({ type: 'descImage', content: imageMatch[1]?.trim() ?? '' });
+      continue;
+    }
+    buffer.push(line);
   }
-  // 行内残留的标记直接去掉，避免直接念给用户看
-  const text = textLines
-    .join('\n')
-    .replace(/\[(?:表情|sticker)\s*[:：][^\]]*\]/gi, '')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-  return { text, stickers: picked };
+  flush();
+
+  // 行内残留的标记直接去掉，避免念给用户看
+  const cleaned: ReplyPart[] = [];
+  for (const part of parts) {
+    if (part.type !== 'text') {
+      if (part.type === 'descImage' && !part.content) continue;
+      cleaned.push(part);
+      continue;
+    }
+    const content = part.content
+      .replace(/\[(?:表情|sticker|图片|图像|照片|image)\s*[:：][^\]]*\]/gi, '')
+      .trim();
+    if (content) cleaned.push({ type: 'text', content });
+  }
+  return cleaned;
 }
 
 const SSE_HEADERS = {
@@ -237,41 +270,30 @@ export async function streamAssistantReply(options: {
       event(reply, 'delta', { text: delta });
     }
 
-    const parsed = parseStickerReply(content.trim(), listStickers());
-    if (!parsed.text && parsed.stickers.length === 0) {
+    const parts = parseReply(content.trim(), listStickers());
+    if (parts.length === 0) {
       throw new HttpError(502, '模型没有返回内容');
     }
 
     const savedMessages: MessagePublic[] = [];
-    // 同一毫秒插入的多条消息要保证顺序：文字在前、表情在后
+    // 同一毫秒插入的多条消息要保证顺序，按解析出来的先后各留 1ms
     let stamp = Date.now();
-    if (parsed.text) {
-      const textMessage = insertMessage({
+    for (const part of parts) {
+      const kind = part.type === 'text' ? 'text' : part.type === 'sticker' ? 'image' : 'desc-image';
+      const body =
+        part.type === 'text' ? part.content : part.type === 'sticker' ? part.url : part.content;
+      const message = insertMessage({
         chatId,
         role: 'assistant',
         senderId: character.id,
-        kind: 'text',
-        content: parsed.text,
+        kind,
+        content: body,
         createdAt: stamp,
       });
       stamp += 1;
-      savedMessages.push(textMessage);
-      saved = textMessage;
-      event(reply, 'message', { message: textMessage });
-    }
-    for (const sticker of parsed.stickers) {
-      const imageMessage = insertMessage({
-        chatId,
-        role: 'assistant',
-        senderId: character.id,
-        kind: 'image',
-        content: sticker.url,
-        createdAt: stamp,
-      });
-      stamp += 1;
-      savedMessages.push(imageMessage);
-      saved = imageMessage;
-      event(reply, 'message', { message: imageMessage });
+      savedMessages.push(message);
+      saved = message;
+      event(reply, 'message', { message });
     }
 
     touchChat(chatId, 1);
