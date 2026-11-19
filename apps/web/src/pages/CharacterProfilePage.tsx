@@ -20,6 +20,7 @@ export function CharacterProfilePage() {
   const [moments, setMoments] = useState<MomentPublic[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
+  const [personaOpen, setPersonaOpen] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -77,6 +78,7 @@ export function CharacterProfilePage() {
   }
 
   const avatar = character.avatar?.trim();
+  const personaText = character.persona.trim();
 
   return (
     <div className="app-frame flex min-h-dvh flex-col">
@@ -127,9 +129,23 @@ export function CharacterProfilePage() {
         </button>
 
         <section className="card p-4">
-          <p className="text-[12px] font-medium">人设</p>
-          <p className="mt-2 whitespace-pre-wrap text-[12px] leading-relaxed text-[var(--muted)]">
-            {character.persona.trim() || '还没有写人设'}
+          <div className="flex items-center justify-between">
+            <p className="text-[12px] font-medium">人设</p>
+            {personaText.length > 80 ? (
+              <button
+                className="text-[10px] text-[var(--faint)]"
+                onClick={() => setPersonaOpen((open) => !open)}
+              >
+                {personaOpen ? '收起' : '展开'}
+              </button>
+            ) : null}
+          </div>
+          <p
+            className={`mt-2 whitespace-pre-wrap text-[12px] leading-relaxed text-[var(--muted)] ${
+              personaOpen ? '' : 'line-clamp-3'
+            }`}
+          >
+            {personaText || '还没有写人设'}
           </p>
           {character.greeting.trim() ? (
             <>

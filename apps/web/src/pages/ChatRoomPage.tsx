@@ -462,6 +462,7 @@ export function ChatRoomPage() {
   }
 
   async function deleteBubble(message: MessagePublic, lineIndex: number) {
+    if (!window.confirm('删掉这条气泡？只删这一条，其余不动。')) return;
     const lines = message.content.split('\n');
     lines.splice(lineIndex, 1);
     const content = lines.join('\n').trim();
@@ -936,12 +937,6 @@ export function ChatRoomPage() {
                       >
                         <MoreHorizontal size={13} />
                       </button>
-                    ) : null}
-
-                    {message.editedAt ? (
-                      <p className={`mt-1 text-[9px] text-[var(--faint)] ${mine ? 'text-right' : ''}`}>
-                        已编辑
-                      </p>
                     ) : null}
 
                     {isAction ? (
