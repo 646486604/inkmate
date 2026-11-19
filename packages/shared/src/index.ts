@@ -235,6 +235,8 @@ export const sendMessageSchema = z.object({
     .default('text'),
   /** 图片的一句话描述：模型看不到图，只能靠它“看到” */
   description: z.string().trim().max(200, '描述最多 200 个字').optional(),
+  /** 这条图片其实是表情包（提示词里会写成 [表情:描述]） */
+  sticker: z.boolean().optional(),
   /** 假语音的时长（秒） */
   durationSeconds: z.number().int().min(1).max(120).optional(),
   /** 假红包的金额（元） */
@@ -247,6 +249,7 @@ export const sendBatchItemSchema = z.object({
   kind: z.enum(['text', 'image', 'desc-image']).optional().default('text'),
   content: z.string().trim().min(1, '消息不能为空').max(8000),
   description: z.string().trim().max(200, '描述最多 200 个字').optional(),
+  sticker: z.boolean().optional(),
 });
 export type SendBatchItem = z.infer<typeof sendBatchItemSchema>;
 

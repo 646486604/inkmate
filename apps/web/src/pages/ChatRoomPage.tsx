@@ -122,7 +122,9 @@ export function ChatRoomPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
   const [input, setInput] = useState('');
-  const [pending, setPending] = useState<Array<{ kind: 'text' | 'image'; value: string }>>([]);
+  const [pending, setPending] = useState<
+    Array<{ kind: 'text' | 'image'; value: string; description?: string; sticker?: boolean }>
+  >([]);
   const [editing, setEditing] = useState<{ id: string; content: string } | null>(null);
   const [streaming, setStreaming] = useState<{ text: string; createdAt: number } | null>(null);
   const [streamingSpeaker, setStreamingSpeaker] = useState<ChatMemberPublic | null>(null);
@@ -285,7 +287,14 @@ export function ChatRoomPage() {
     try {
       await streamAssistant(
         `/api/chats/${id}/messages/batch`,
-        { items: batch.map((item) => ({ kind: item.kind, content: item.value })) },
+        {
+          items: batch.map((item) => ({
+            kind: item.kind,
+            content: item.value,
+            ...(item.description ? { description: item.description } : {}),
+            ...(item.sticker ? { sticker: true } : {}),
+          })),
+        },
         {
           onStart: (data) => {
             const inserted = data.userMessages ?? (data.userMessage ? [data.userMessage] : []);
@@ -334,10 +343,18 @@ export function ChatRoomPage() {
     inputRef.current?.focus();
   }
 
-  /** 表情包也先放进待发，和文字一起发 */
-  function queueSticker(url: string) {
+  /** 表情包也先放进待发，和文字一起发；带上描述，AI 才知道你发的是什么 */
+  function queueSticker(url: string, desc: string) {
     setPending((current) =>
-      [...current, { kind: 'image' as const, value: url }].slice(0, 10),
+      [
+        ...current,
+        {
+          kind: 'image' as const,
+          value: url,
+          sticker: true,
+          description: desc.trim() || undefined,
+        },
+      ].slice(0, 10),
     );
   }
 
@@ -1325,7 +1342,7 @@ export function ChatRoomPage() {
                   <div key={sticker.url} className="relative">
                     <button
                       className="block w-full overflow-hidden rounded-xl border border-[var(--line)]"
-                      onClick={() => queueSticker(sticker.url)}
+                      onClick={() => queueSticker(sticker.url, sticker.desc)}
                       aria-label="加入待发"
                       title={sticker.desc || '还没写描述，AI 不会主动发这张'}
                     >

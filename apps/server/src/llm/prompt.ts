@@ -48,6 +48,7 @@ function messageTextForPrompt(message: MessagePublic): string {
   if (message.kind === 'image') {
     const desc =
       typeof message.meta?.description === 'string' ? message.meta.description.trim() : '';
+    if (message.meta?.sticker === true) return `[表情：${desc || '表情包'}]`;
     return desc ? `[图片：${desc}]` : '[图片]';
   }
   if (message.kind === 'voice') {

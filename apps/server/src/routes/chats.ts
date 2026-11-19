@@ -144,6 +144,7 @@ const chatRoutes: FastifyPluginAsync = async (app) => {
     if (input.description) meta.description = input.description;
     if (input.durationSeconds !== undefined) meta.durationSeconds = input.durationSeconds;
     if (input.amount !== undefined) meta.amount = input.amount;
+    if (input.sticker) meta.sticker = true;
 
     const userMessage = insertMessage({
       chatId: id,
@@ -178,6 +179,7 @@ const chatRoutes: FastifyPluginAsync = async (app) => {
       kind: 'text' | 'image' | 'desc-image';
       content: string;
       description?: string;
+      sticker?: boolean;
     }> =
       input.items && input.items.length > 0
         ? input.items
@@ -190,17 +192,20 @@ const chatRoutes: FastifyPluginAsync = async (app) => {
     // 同一毫秒插入的多条消息会拿到相同的 created_at，排序就乱了；
     // 这里按顺序给每一条留 1ms，保证「先攒的先显示」
     const base = Date.now();
-    const inserted = items.map((item, index) =>
-      insertMessage({
+    const inserted = items.map((item, index) => {
+      const meta: Record<string, unknown> = {};
+      if (item.description) meta.description = item.description;
+      if (item.sticker) meta.sticker = true;
+      return insertMessage({
         chatId: id,
         role: 'user',
         senderId: req.user!.id,
         kind: item.kind,
         content: item.content,
-        meta: item.description ? { description: item.description } : undefined,
+        meta: Object.keys(meta).length > 0 ? meta : undefined,
         createdAt: base + index,
-      }),
-    );
+      });
+    });
     touchChat(id, 0);
     markChatRead(id);
 

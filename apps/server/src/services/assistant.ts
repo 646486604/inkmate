@@ -30,7 +30,7 @@ const STICKER_LINE = /^\s*\[(?:表情|sticker)\s*[:：]\s*(.+?)\]\s*$/i;
 
 type ReplyPart =
   | { type: 'text'; content: string }
-  | { type: 'sticker'; url: string }
+  | { type: 'sticker'; url: string; desc: string }
   | { type: 'descImage'; content: string }
   | { type: 'voice'; content: string; seconds: number }
   | { type: 'packet'; content: string; amount: number };
@@ -70,7 +70,7 @@ function parseReply(raw: string, stickers: StickerPublic[]): ReplyPart[] {
         );
       if (found) {
         flush();
-        parts.push({ type: 'sticker', url: found.url });
+        parts.push({ type: 'sticker', url: found.url, desc: found.desc.trim() });
       }
       continue;
     }
@@ -331,7 +331,9 @@ export async function streamAssistantReply(options: {
           ? { durationSeconds: part.seconds }
           : part.type === 'packet'
             ? { amount: part.amount }
-            : undefined;
+            : part.type === 'sticker'
+              ? { sticker: true, description: part.desc }
+              : undefined;
       const message = insertMessage({
         chatId,
         role: 'assistant',
