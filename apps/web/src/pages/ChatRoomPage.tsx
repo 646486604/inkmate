@@ -128,6 +128,7 @@ export function ChatRoomPage() {
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
+  const [canRetry, setCanRetry] = useState(false);
   const [input, setInput] = useState('');
   const [pending, setPending] = useState<
     Array<{
@@ -276,6 +277,7 @@ export function ChatRoomPage() {
     abortRef.current = controller;
     setSending(true);
     setError('');
+    setCanRetry(false);
     return controller;
   }
 
@@ -351,8 +353,15 @@ export function ChatRoomPage() {
             if (data.message) setMessages((current) => upsert(current, data.message!));
             if (data.error) {
               setError(data.error);
-              // 没落库就把待发还回去，已落库则保留输入框内容，方便重发/改写
-              if (insertedCount === 0) setPending(batch);
+              if (insertedCount === 0) {
+                // 没落库：整批还回去，直接再发不会重复
+                setPending(batch);
+              } else {
+                // 已经发出去了，别再发一遍；给出「重试生成」
+                setInput('');
+                setPending([]);
+                setCanRetry(true);
+              }
             } else {
               setInput('');
               setPending([]);
@@ -361,7 +370,13 @@ export function ChatRoomPage() {
           },
           onError: (message) => {
             setError(message);
-            if (insertedCount === 0) setPending(batch);
+            if (insertedCount === 0) {
+              setPending(batch);
+            } else {
+              setInput('');
+              setPending([]);
+              setCanRetry(true);
+            }
             finishStream();
             void refreshMessages();
           },
@@ -372,6 +387,11 @@ export function ChatRoomPage() {
       if (!controller.signal.aborted) {
         setError(err instanceof ApiError ? err.message : '发送失败');
         if (insertedCount === 0) setPending(batch);
+        else {
+          setInput('');
+          setPending([]);
+          setCanRetry(true);
+        }
       }
       finishStream();
     }
@@ -920,6 +940,19 @@ export function ChatRoomPage() {
       {error ? (
         <div className="mx-4 mt-2 flex items-start gap-2 rounded-xl border border-[var(--line)] bg-[var(--accent-soft)] px-3 py-2 text-[11px] leading-relaxed text-[var(--accent-strong)]">
           <span className="flex-1">{error}</span>
+          {canRetry ? (
+            <button
+              className="btn btn-ghost h-7 min-h-7 shrink-0 px-2 text-[10px]"
+              onClick={() => {
+                setCanRetry(false);
+                setError('');
+                void regenerate();
+              }}
+            >
+              <RefreshCw size={11} />
+              重试生成
+            </button>
+          ) : null}
           <button onClick={() => setError('')}>
             <X size={13} />
           </button>
