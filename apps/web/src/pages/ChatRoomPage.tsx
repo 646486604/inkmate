@@ -710,6 +710,7 @@ export function ChatRoomPage() {
 
   async function setChatBackground(url: string) {
     if (!id) return;
+    if (!url && !window.confirm('清除这个会话的聊天背景？')) return;
     setBgBusy(true);
     setError('');
     try {
@@ -740,6 +741,7 @@ export function ChatRoomPage() {
   }
 
   async function removeSticker(url: string) {
+    if (!window.confirm('把这个表情包从库里删掉？已经发出去的不受影响。')) return;
     try {
       const result = await api.removeSticker(url);
       setStickers(result.stickers);

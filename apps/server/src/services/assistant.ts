@@ -17,13 +17,13 @@ import {
 } from '../db/chats.js';
 import { getMemory } from '../db/memory.js';
 import { createPromise, listUpcomingPromises } from '../db/promises.js';
+import { addAgendaItem, listAgenda } from '../db/agenda.js';
 import { getWorldEntriesForCharacter, type InjectedWorldEntry } from '../db/world-books.js';
 import { HttpError } from '../lib/http-error.js';
 import { buildChatMessages, buildGroupMessages } from '../llm/prompt.js';
 import { resolveProviderForCharacter } from '../llm/resolve.js';
 import { streamChat } from '../llm/stream.js';
 import { maybeSummarize } from './memory.js';
-import { getScheduleContext } from './schedule.js';
 import { getWeatherText } from './weather.js';
 import { listStickers, stickersForPrompt } from './stickers.js';
 
@@ -35,12 +35,19 @@ type ReplyPart =
   | { type: 'descImage'; content: string }
   | { type: 'voice'; content: string; seconds: number }
   | { type: 'packet'; content: string; amount: number }
-  | { type: 'promise'; dueAt: number; note: string };
+  | { type: 'promise'; dueAt: number; note: string }
+  | { type: 'agenda'; content: string };
 
 const IMAGE_LINE = /^\s*\[(?:图片|图像|照片|image)\s*[:：]\s*(.+?)\]\s*$/i;
 const VOICE_LINE = /^\s*\[(?:语音|voice)\s*[:：]\s*(.*?)\]\s*$/i;
 const PACKET_LINE = /^\s*\[(?:红包|red-?packet)\s*[:：]\s*(.+?)\]\s*$/i;
 const PROMISE_LINE = /^\s*\[(?:约|约定|提醒|remind)\s*[:：]\s*(\d{1,2})\s*[:：]\s*(\d{2})\s*([^\]]*?)\]\s*$/i;
+const AGENDA_LINE = /^\s*\[(?:日程|安排|agenda)\s*[:：]\s*(.+?)\]\s*$/i;
+
+function todayKey(date = new Date()): string {
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
 
 /** 约定时间：今天该时刻还没到就今天，过了就明天 */
 function nextDueAt(hour: number, minute: number): number {
@@ -120,6 +127,12 @@ function parseReply(raw: string, stickers: StickerPublic[]): ReplyPart[] {
         dueAt: nextDueAt(hour, minute),
         note: (promiseMatch[3] ?? '').trim(),
       });
+      continue;
+    }
+    const agendaMatch = AGENDA_LINE.exec(line);
+    if (agendaMatch) {
+      flush();
+      parts.push({ type: 'agenda', content: (agendaMatch[1] ?? '').trim() });
       continue;
     }
     buffer.push(line);
@@ -247,8 +260,7 @@ export async function streamAssistantReply(options: {
   let speaker: ChatMemberPublic | null = null;
   let worldEntries: InjectedWorldEntry[];
   let memory: MemoryPublic | null = null;
-  let schedule: ReturnType<typeof getScheduleContext> = null;
-
+  
   if (isGroup) {
     if (members.length < 2) throw new HttpError(400, '群聊成员不足');
     speaker = selectGroupSpeaker(chatId, members, options.userText ?? '', options.speakerId);
@@ -263,7 +275,6 @@ export async function streamAssistantReply(options: {
     character = found;
     worldEntries = getWorldEntriesForCharacter(character.id);
     memory = getMemory(chatId);
-    schedule = getScheduleContext(character.id);
   }
 
   const config = resolveProviderForCharacter(character);
@@ -294,10 +305,10 @@ export async function streamAssistantReply(options: {
         history,
         worldEntries,
         memory: memory ?? undefined,
-        schedule: schedule ?? undefined,
         weather,
         stickers: stickerLibrary,
         promises: listUpcomingPromises(chatId),
+        agenda: listAgenda(character.id, todayKey()),
       });
 
   reply.hijack();
@@ -332,20 +343,23 @@ export async function streamAssistantReply(options: {
 
     // 「[约:20:30 …]」只写一条定时记录，到点由调度器生成主动消息
     for (const part of parts) {
-      if (part.type !== 'promise') continue;
-      createPromise({
-        chatId,
-        characterId: character.id,
-        dueAt: part.dueAt,
-        note: part.note,
-      });
+      if (part.type === 'promise') {
+        createPromise({
+          chatId,
+          characterId: character.id,
+          dueAt: part.dueAt,
+          note: part.note,
+        });
+      } else if (part.type === 'agenda') {
+        addAgendaItem(character.id, todayKey(), part.content);
+      }
     }
 
     const savedMessages: MessagePublic[] = [];
     // 同一毫秒插入的多条消息要保证顺序，按解析出来的先后各留 1ms
     let stamp = Date.now();
     for (const part of parts) {
-      if (part.type === 'promise') continue;
+      if (part.type === 'promise' || part.type === 'agenda') continue;
       const kind =
         part.type === 'text'
           ? 'text'

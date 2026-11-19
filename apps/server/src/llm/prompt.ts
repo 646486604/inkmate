@@ -85,11 +85,12 @@ export function buildChatMessages(options: {
   history: MessagePublic[];
   worldEntries?: WorldEntryInput[];
   memory?: MemoryPublic;
-  schedule?: ScheduleContext;
   weather?: string;
   stickers?: StickerPublic[];
   /** 角色答应过的“几点来找你” */
   promises?: Array<{ due_at: number; note: string }>;
+  /** 今天在聊天里自己提过的事（取代固定时间表的注入） */
+  agenda?: string[];
   now?: Date;
 }): ChatMessage[] {
   const {
@@ -99,10 +100,10 @@ export function buildChatMessages(options: {
     history,
     worldEntries = [],
     memory,
-    schedule,
     weather,
     stickers = [],
     promises = [],
+    agenda = [],
     now = new Date(),
   } = options;
   const nickname = character.nickname.trim() || character.name;
@@ -145,21 +146,6 @@ export function buildChatMessages(options: {
         .join('\n')
     : '';
 
-  const scheduleText = schedule
-    ? [
-        `心情：${schedule.mood || '平常'}`,
-        schedule.summary ? `今天：${schedule.summary}` : '',
-        schedule.current
-          ? `现在：${schedule.current.activity}${schedule.current.location ? `（${schedule.current.location}）` : ''}`
-          : '',
-        schedule.next
-          ? `接下来：${formatClock(schedule.next.startAt)} ${schedule.next.activity}`
-          : '',
-      ]
-        .filter(Boolean)
-        .join('\n')
-    : '';
-
   const system = [
     `你正在「墨伴」里扮演「${character.name}」，和${userName}一对一线聊。你的昵称是「${nickname}」。`,
     '这是一段私人的、持续的线上关系。你就是这个角色，不是在扮演助手，也不是在写小说。',
@@ -175,7 +161,9 @@ export function buildChatMessages(options: {
     '',
     memoryText ? `【长期记忆】\n${memoryText}` : '',
     '',
-    scheduleText ? `【你今天的计划】（计划而已，可能没全按它发生）\n${scheduleText}` : '',
+    agenda.length > 0
+      ? `【你今天跟 TA 提过的事】\n${agenda.map((item) => `- ${item}`).join('\n')}`
+      : '',
     '',
     weather ? `【今天的真实天气】${weather}。聊天里提到天气时以这个为准，不要编。` : '',
     '',
@@ -197,9 +185,10 @@ export function buildChatMessages(options: {
       : '',
     '- 想给对方看某个画面/照片时，单独一行写 [图片:具体描述]，比如 [图片:窗外的雨]；会显示成一张“文字图”。',
     '- 想约好某个具体时间再找对方时，单独一行写 [约:20:30 到点想说的由头]；系统会到点提醒你主动开口，正文里不用重复这个约定。',
+    '- 你在聊天里提到自己今天要做的事（下午开会、晚上去买东西），可以单独一行写 [日程:下午开会]，系统会记到今天的日程里；不用每条消息都写。',
     '- 想发语音时单独一行写 [语音:说的话]；想发红包时单独一行写 [红包:金额 祝福语]（如 [红包:6.66 恭喜发财]）。这些都是文字演的，不会真扣钱。',
     '- 记得你们之前聊过什么，接得上就接；不知道的事不要编。',
-    '- 你的计划只影响状态和语气；不要主动念计划，也不要解释“我刚从计划里看到”。计划可能没照做，可以自然地推迟或改变。',
+    '- 你有自己的生活节奏，但只在聊到相关话题时顺带提一句，不要反复播报自己在干什么、几点在干什么。',
     '',
     `【现在】${formatNow(now)}。你知道现在的时间，但除非相关，不要主动评论时间。`,
   ]
@@ -407,6 +396,8 @@ export function buildProactiveMessages(options: {
     '',
     '【规则】',
     '- 像微信私聊一样，自然地发 1–3 条短句；不要写成小作文。',
+    '- 每一句都要和对方有关：想 TA、问 TA、和 TA 有关的小事，或者你们之间的回忆。',
+    '- 不要只是汇报自己在做什么，也不要把工作内容讲给 TA。',
     '- 不要解释“我为什么发消息”，不要汇报计划，不要提设定。',
     '- 不要用“在吗”“最近怎么样”这种空泛开场；要带一个具体的此刻或记得的事。',
     '- 不要重复最近说过的话；不要替对方说话。',

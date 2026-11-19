@@ -79,8 +79,12 @@ export function AppShell() {
             />
             {online ? '在线' : '离线'}
           </span>
-          <div className="grid h-10 w-10 place-items-center rounded-full border border-[var(--line)] bg-[var(--seal-bg)] text-[13px] font-medium text-[var(--seal-fg)] shadow-sm">
-            {(user?.displayName || '我').slice(0, 1)}
+          <div className="grid h-10 w-10 place-items-center overflow-hidden rounded-full border border-[var(--line)] bg-[var(--seal-bg)] text-[13px] font-medium text-[var(--seal-fg)] shadow-sm">
+            {user?.avatar ? (
+              <img src={user.avatar} alt="" className="h-full w-full object-cover" />
+            ) : (
+              (user?.displayName || '我').slice(0, 1)
+            )}
           </div>
         </div>
       </header>

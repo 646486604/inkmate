@@ -98,6 +98,16 @@ CREATE TABLE IF NOT EXISTS chat_promises (
 );
 CREATE INDEX IF NOT EXISTS idx_promises_due ON chat_promises(status, due_at);
 
+-- 角色在聊天里自己提过的日程（"下午开会"这种），用来替代固定时间表
+CREATE TABLE IF NOT EXISTS character_agenda (
+  id TEXT PRIMARY KEY,
+  character_id TEXT NOT NULL,
+  date TEXT NOT NULL,
+  content TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_agenda_character_date ON character_agenda(character_id, date);
+
 CREATE TABLE IF NOT EXISTS world_books (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,

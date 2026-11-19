@@ -290,6 +290,8 @@ export const api = {
     const query = date ? `?date=${encodeURIComponent(date)}` : '';
     return request<{ plan: DayPlanPublic | null }>(`/api/characters/${characterId}/plan${query}`);
   },
+  agenda: (characterId: string) =>
+    request<{ date: string; items: string[] }>(`/api/characters/${characterId}/agenda`),
   refreshPlan: (characterId: string) =>
     request<{ plan: DayPlanPublic }>(`/api/characters/${characterId}/plan/refresh`, {
       method: 'POST',

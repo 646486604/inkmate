@@ -36,13 +36,18 @@ export function SchedulePanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [agenda, setAgenda] = useState<string[]>([]);
 
   async function load() {
     try {
-      const result = await api.schedule(characterId);
-      setPlan(result.plan);
+      const [planResult, agendaResult] = await Promise.all([
+        api.schedule(characterId),
+        api.agenda(characterId),
+      ]);
+      setPlan(planResult.plan);
+      setAgenda(agendaResult.items);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : '加载计划失败');
+      setError(err instanceof ApiError ? err.message : '加载日程失败');
     } finally {
       setLoading(false);
     }
@@ -50,13 +55,14 @@ export function SchedulePanel({
 
   useEffect(() => {
     let alive = true;
-    api
-      .schedule(characterId)
-      .then((result) => {
-        if (alive) setPlan(result.plan);
+    Promise.all([api.schedule(characterId), api.agenda(characterId)])
+      .then(([planResult, agendaResult]) => {
+        if (!alive) return;
+        setPlan(planResult.plan);
+        setAgenda(agendaResult.items);
       })
       .catch((err) => {
-        if (alive) setError(err instanceof ApiError ? err.message : '加载计划失败');
+        if (alive) setError(err instanceof ApiError ? err.message : '加载日程失败');
       })
       .finally(() => {
         if (alive) setLoading(false);
@@ -74,9 +80,9 @@ export function SchedulePanel({
     try {
       const result = await api.refreshPlan(characterId);
       setPlan(result.plan);
-      setNotice('今天的计划已重新生成');
+      setNotice('今天的日程已重新生成');
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : '生成计划失败');
+      setError(err instanceof ApiError ? err.message : '生成日程失败');
     } finally {
       setBusy(false);
     }
@@ -124,9 +130,9 @@ export function SchedulePanel({
               <CalendarDays size={17} />
             </span>
             <div>
-              <p className="text-[14px] font-medium">今天的计划</p>
+              <p className="text-[14px] font-medium">今天的日程</p>
               <p className="mt-0.5 text-[10px] text-[var(--faint)]">
-                TA 会在这些节拍里决定要不要找你
+                TA 自己说过的安排，不是固定时刻表
               </p>
             </div>
           </div>
@@ -163,6 +169,22 @@ export function SchedulePanel({
               </p>
             </div>
 
+            {agenda.length > 0 ? (
+              <div className="rounded-2xl border border-[var(--line)] bg-[var(--card-solid)] p-4">
+                <p className="text-[11px] font-medium">TA 今天提到过的事</p>
+                <ul className="mt-2 space-y-1">
+                  {agenda.map((item) => (
+                    <li
+                      key={item}
+                      className="text-[11px] leading-relaxed text-[var(--muted)]"
+                    >
+                      · {item}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
             <div className="space-y-2">
               {plan.beats.map((beat) => {
                 const isNow = beat.startAt <= now && (!beat.endAt || beat.endAt > now);
@@ -181,33 +203,13 @@ export function SchedulePanel({
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-1.5">
                         <p className="text-[11px] text-[var(--ink)]">{beat.activity}</p>
-                        {beat.contactWorthy ? (
-                          <span className="chip">
-                            <Sparkles size={9} />
-                            联系点
-                          </span>
-                        ) : null}
                         {beat.status !== 'pending' ? (
                           <span className="text-[9px] text-[var(--faint)]">
                             {statusLabel(beat.status)}
                           </span>
                         ) : null}
                       </div>
-                      {beat.contactIntent ? (
-                        <p className="mt-1 text-[9px] leading-relaxed text-[var(--faint)]">
-                          想：{beat.contactIntent}
-                        </p>
-                      ) : null}
                     </div>
-                    {beat.contactWorthy && beat.status === 'pending' ? (
-                      <button
-                        className="btn btn-quiet h-6 min-h-6 shrink-0 px-1.5 text-[9px]"
-                        title="跳过这个联系点"
-                        onClick={() => void skip(beat.id)}
-                      >
-                        <SkipForward size={11} />
-                      </button>
-                    ) : null}
                   </div>
                 );
               })}
@@ -238,7 +240,7 @@ export function SchedulePanel({
         ) : (
           <div className="mt-6 rounded-2xl border border-dashed border-[var(--line-strong)] px-4 py-8 text-center">
             <CalendarDays size={24} className="mx-auto text-[var(--faint)]" />
-            <p className="mt-3 text-[12px]">今天还没有计划</p>
+            <p className="mt-3 text-[12px]">今天还没有日程</p>
             <p className="mt-1 text-[10px] leading-relaxed text-[var(--faint)]">
               开启主动消息后，角色会在每天固定时间自己生成；也可以手动生成一份。
             </p>
@@ -248,7 +250,7 @@ export function SchedulePanel({
               onClick={() => void refresh()}
             >
               {busy ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-              生成今天计划
+              生成日程
             </button>
           </div>
         )}

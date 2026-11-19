@@ -9,6 +9,7 @@ import {
 } from '../db/characters.js';
 import { markBeatSkipped } from '../db/schedules.js';
 import { HttpError } from '../lib/http-error.js';
+import { listAgenda } from '../db/agenda.js';
 import { getSchedule, refreshPlan, sendTestProactive } from '../services/schedule.js';
 import { sendTestMoment } from '../services/moments.js';
 
@@ -49,6 +50,15 @@ const characterRoutes: FastifyPluginAsync = async (app) => {
   app.post('/:id/plan/refresh', async (req) => {
     const { id } = req.params as { id: string };
     return { plan: await refreshPlan(id) };
+  });
+
+  // 角色在聊天里自己提过的日程
+  app.get('/:id/agenda', async (req) => {
+    const { id } = req.params as { id: string };
+    const now = new Date();
+    const pad = (value: number) => String(value).padStart(2, '0');
+    const date = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+    return { date, items: listAgenda(id, date) };
   });
 
   app.post('/:id/proactive/test', async (req) => {
