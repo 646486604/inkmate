@@ -100,10 +100,10 @@ function bubbleEntries(text: string): Array<{ text: string; index: number }> {
 }
 
 const BUBBLE_BASE = 'rounded-2xl px-3.5 py-2.5 text-[13px] leading-relaxed';
-const BUBBLE_MINE = `${BUBBLE_BASE} rounded-br-md bg-[var(--ink)] text-[var(--paper)]`;
-const BUBBLE_MINE_FLAT = `${BUBBLE_BASE} bg-[var(--ink)] text-[var(--paper)]`;
-const BUBBLE_OTHER = `${BUBBLE_BASE} rounded-bl-md border border-[var(--line)] bg-[var(--card-solid)] text-[var(--ink)]`;
-const BUBBLE_OTHER_FLAT = `${BUBBLE_BASE} border border-[var(--line)] bg-[var(--card-solid)] text-[var(--ink)]`;
+const BUBBLE_MINE = `${BUBBLE_BASE} bubble-mine rounded-br-md`;
+const BUBBLE_MINE_FLAT = `${BUBBLE_BASE} bubble-mine`;
+const BUBBLE_OTHER = `${BUBBLE_BASE} bubble-other rounded-bl-md border border-[var(--line)]`;
+const BUBBLE_OTHER_FLAT = `${BUBBLE_BASE} bubble-other border border-[var(--line)]`;
 
 export function ChatRoomPage() {
   const { id } = useParams<{ id: string }>();

@@ -27,10 +27,14 @@ import { useAuth } from '../lib/auth';
 import { ProviderForm } from '../components/ProviderForm';
 import { disablePush, enablePush, hasPushSubscription, sendTestPush } from '../lib/push';
 import {
+  getBubbleStyle,
   getFontSize,
   getThemeMode,
+  resetBubbleStyle,
+  setBubbleStyle,
   setFontSize,
   setThemeMode,
+  type BubbleStyle,
   type FontSize,
   type ThemeMode,
 } from '../lib/appearance';
@@ -59,6 +63,7 @@ export function SettingsPage() {
   );
   const [theme, setTheme] = useState<ThemeMode>(() => getThemeMode());
   const [fontSize, setFontSizeState] = useState<FontSize>(() => getFontSize());
+  const [bubbleStyle, setBubbleStyleState] = useState<BubbleStyle>(() => getBubbleStyle());
   const [importing, setImporting] = useState(false);
   const [profileName, setProfileName] = useState('');
   const [profilePersona, setProfilePersona] = useState('');
@@ -113,6 +118,12 @@ export function SettingsPage() {
     setProfileName(user.displayName ?? '');
     setProfilePersona(user.persona ?? '');
   }, [user]);
+
+  function updateBubble(patch: Partial<BubbleStyle>) {
+    const next = { ...bubbleStyle, ...patch };
+    setBubbleStyleState(next);
+    setBubbleStyle(next);
+  }
 
   async function saveProfile() {
     if (profileBusy) return;
@@ -558,6 +569,56 @@ export function SettingsPage() {
                     {label}
                   </button>
                 ))}
+              </div>
+            </div>
+
+            <div className="mt-3">
+              <p className="text-[9px] text-[var(--faint)]">聊天气泡</p>
+              <div className="mt-1.5 grid grid-cols-2 gap-2">
+                <label className="flex items-center justify-between rounded-xl border border-[var(--line)] px-2.5 py-2 text-[10px] text-[var(--muted)]">
+                  我的
+                  <input
+                    type="color"
+                    value={bubbleStyle.mineColor}
+                    onChange={(event) => updateBubble({ mineColor: event.target.value })}
+                    className="h-6 w-8 cursor-pointer rounded border border-[var(--line)] bg-transparent"
+                  />
+                </label>
+                <label className="flex items-center justify-between rounded-xl border border-[var(--line)] px-2.5 py-2 text-[10px] text-[var(--muted)]">
+                  对方
+                  <input
+                    type="color"
+                    value={bubbleStyle.otherColor}
+                    onChange={(event) => updateBubble({ otherColor: event.target.value })}
+                    className="h-6 w-8 cursor-pointer rounded border border-[var(--line)] bg-transparent"
+                  />
+                </label>
+              </div>
+              <div className="mt-2">
+                <div className="flex items-center justify-between text-[9px] text-[var(--faint)]">
+                  <span>气泡不透明度</span>
+                  <span className="tabular">{Math.round(bubbleStyle.alpha * 100)}%</span>
+                </div>
+                <input
+                  type="range"
+                  min={35}
+                  max={100}
+                  step={5}
+                  value={Math.round(bubbleStyle.alpha * 100)}
+                  onChange={(event) => updateBubble({ alpha: Number(event.target.value) / 100 })}
+                  className="mt-1 w-full accent-[var(--accent)]"
+                />
+              </div>
+              <div className="mt-1 flex items-center justify-between">
+                <span className="text-[9px] leading-relaxed text-[var(--faint)]">
+                  调低会露出聊天背景
+                </span>
+                <button
+                  className="text-[9px] text-[var(--faint)] underline"
+                  onClick={() => setBubbleStyleState(resetBubbleStyle())}
+                >
+                  恢复默认
+                </button>
               </div>
             </div>
           </div>

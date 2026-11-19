@@ -341,6 +341,17 @@ button:disabled {
   animation: float-in 380ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }
 
+/* 气泡底色/文字色由「外观」里的设置通过 CSS 变量控制，透明度也能调 */
+.bubble-mine {
+  background: rgb(var(--bubble-mine-rgb, 33 28 24) / var(--bubble-alpha, 1));
+  color: rgb(var(--bubble-mine-fg, 255 250 242));
+}
+
+.bubble-other {
+  background: rgb(var(--bubble-other-rgb, 251 247 240) / var(--bubble-alpha, 1));
+  color: rgb(var(--bubble-other-fg, 27 22 18));
+}
+
 @keyframes float-in {
   from {
     opacity: 0;
