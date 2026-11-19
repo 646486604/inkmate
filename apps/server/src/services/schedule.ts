@@ -31,6 +31,7 @@ import { completeChat } from '../llm/complete.js';
 import { buildProactiveMessages } from '../llm/prompt.js';
 import { resolveProviderForCharacter } from '../llm/resolve.js';
 import { maybeSummarize } from './memory.js';
+import { listDuePromises, markPromise } from '../db/promises.js';
 import { publish } from './events.js';
 import { sendPushToAll } from './push.js';
 import { getWeatherText } from './weather.js';
@@ -43,6 +44,7 @@ interface LoggerLike {
 
 const planInFlight = new Set<string>();
 const beatInFlight = new Set<string>();
+const promiseInFlight = new Set<string>();
 const PLAN_CHECK_MS = 5 * 60 * 1000;
 const BEAT_CHECK_MS = 30 * 1000;
 
@@ -283,7 +285,7 @@ async function generatePlan(
             '规则：',
             '- 6–10 个生活节拍，从起床到睡前，时间递增；活动要符合角色设定。',
             '- 这是“打算做什么”的计划，不是已经发生的事实：允许推迟、取消、临时改变，也别写得像流水账。',
-            '- 1–4 个 contact.worthy=true 的联系点，间隔至少 60 分钟；intent 写“为什么此刻想找对方”。',
+            '- 1–4 个 contact.worthy=true 的联系点，间隔至少 60 分钟；intent 只写“为什么此刻想找对方”（想念、想分享心情、忽然想起某件事），不要写工作内容、汇报、会议、项目、客户、数据。',
             '- 80% 是普通日常，不要每天都发生戏剧性事件；不要写用户也在场。',
             '- 不要写“发消息”“联系用户”这类出戏措辞，只写角色自己的生活。',
             '- 不要编造具体的天气、新闻、比赛结果等外部事实。',
@@ -598,17 +600,87 @@ async function tickPlans(logger: LoggerLike): Promise<void> {
   }
 }
 
+/** 角色答应过“几点来找你”：到点用和主动消息同一条管道发一条 */
+export async function runDuePromises(logger: LoggerLike): Promise<void> {
+  const due = listDuePromises();
+  for (const promise of due) {
+    if (promiseInFlight.has(promise.id)) continue;
+    promiseInFlight.add(promise.id);
+    try {
+      const character = getCharacter(promise.character_id);
+      if (!character) {
+        markPromise(promise.id, 'skipped');
+        continue;
+      }
+      const now = new Date();
+      // 安静时段先不发，等过了再补（保留 pending，下一轮再看）
+      if (
+        !character.initiative.testMode &&
+        isQuiet(now, character.initiative.quietStart, character.initiative.quietEnd)
+      ) {
+        continue;
+      }
+
+      const date = dateKeyOf(now);
+      let plan = getPlan(character.id, date);
+      if (!plan) plan = await generatePlan(character, date, logger);
+      const beat: DueBeat = {
+        id: `promise-${promise.id}`,
+        plan_id: plan.id,
+        start_at: promise.due_at,
+        end_at: promise.due_at + 60 * 60_000,
+        due_at: promise.due_at,
+        activity: currentBeat(character.id, date, Date.now())?.activity ?? '此刻',
+        location: '',
+        energy: 'normal',
+        contact_worthy: 1,
+        contact_intent: promise.note
+          ? `之前答应过这个时间来找对方：${promise.note}`
+          : '之前答应过这个时间来找对方',
+        tone: '自然',
+        status: 'pending',
+        message_id: null,
+        attempts: 0,
+        created_at: Date.now(),
+        character_id: character.id,
+        plan_date: date,
+        mood: plan.mood,
+        summary: plan.summary,
+      };
+      const message = await processBeat(beat, logger, { force: true });
+      markPromise(promise.id, message ? 'sent' : 'skipped', message?.id ?? null);
+      if (message) {
+        logger.info(
+          { characterId: character.id, chatId: promise.chat_id, promiseId: promise.id },
+          '[promise] sent',
+        );
+      }
+    } catch (error) {
+      logger.warn(
+        { err: error instanceof Error ? error.message : String(error), promiseId: promise.id },
+        '[promise] send failed',
+      );
+    } finally {
+      promiseInFlight.delete(promise.id);
+    }
+  }
+}
+
 export function startProactiveScheduler(logger: LoggerLike): () => void {
   const planTimer = setInterval(() => void tickPlans(logger), PLAN_CHECK_MS);
   const beatTimer = setInterval(() => void runDueBeats(logger), BEAT_CHECK_MS);
+  const promiseTimer = setInterval(() => void runDuePromises(logger), BEAT_CHECK_MS);
   planTimer.unref?.();
   beatTimer.unref?.();
+  promiseTimer.unref?.();
   setTimeout(() => {
     void tickPlans(logger);
     void runDueBeats(logger);
+    void runDuePromises(logger);
   }, 2_000).unref?.();
   return () => {
     clearInterval(planTimer);
     clearInterval(beatTimer);
+    clearInterval(promiseTimer);
   };
 }

@@ -88,6 +88,8 @@ export function buildChatMessages(options: {
   schedule?: ScheduleContext;
   weather?: string;
   stickers?: StickerPublic[];
+  /** 角色答应过的“几点来找你” */
+  promises?: Array<{ due_at: number; note: string }>;
   now?: Date;
 }): ChatMessage[] {
   const {
@@ -100,6 +102,7 @@ export function buildChatMessages(options: {
     schedule,
     weather,
     stickers = [],
+    promises = [],
     now = new Date(),
   } = options;
   const nickname = character.nickname.trim() || character.name;
@@ -176,6 +179,12 @@ export function buildChatMessages(options: {
     '',
     weather ? `【今天的真实天气】${weather}。聊天里提到天气时以这个为准，不要编。` : '',
     '',
+    promises.length > 0
+      ? `【你答应过的时间】\n${promises
+          .map((item) => `- ${formatClock(item.due_at)}${item.note ? `：${item.note}` : ''}`)
+          .join('\n')}`
+      : '',
+    '',
     '【怎么说话】',
     '- 像微信私聊：口语、短句，不要写成小作文。',
     '- 每次回复拆成 3–7 条短消息，每条一行、用换行分隔，一条只讲一件事；内容确实少就 2–3 条，别为了凑数硬拆。',
@@ -187,6 +196,7 @@ export function buildChatMessages(options: {
       ? `- 想发表情包时，单独一行写 [表情:描述]（这一行不要带别的字）。可用：${stickerText}。`
       : '',
     '- 想给对方看某个画面/照片时，单独一行写 [图片:具体描述]，比如 [图片:窗外的雨]；会显示成一张“文字图”。',
+    '- 想约好某个具体时间再找对方时，单独一行写 [约:20:30 到点想说的由头]；系统会到点提醒你主动开口，正文里不用重复这个约定。',
     '- 想发语音时单独一行写 [语音:说的话]；想发红包时单独一行写 [红包:金额 祝福语]（如 [红包:6.66 恭喜发财]）。这些都是文字演的，不会真扣钱。',
     '- 记得你们之前聊过什么，接得上就接；不知道的事不要编。',
     '- 你的计划只影响状态和语气；不要主动念计划，也不要解释“我刚从计划里看到”。计划可能没照做，可以自然地推迟或改变。',
@@ -400,6 +410,7 @@ export function buildProactiveMessages(options: {
     '- 不要解释“我为什么发消息”，不要汇报计划，不要提设定。',
     '- 不要用“在吗”“最近怎么样”这种空泛开场；要带一个具体的此刻或记得的事。',
     '- 不要重复最近说过的话；不要替对方说话。',
+    '- 工作上的事（项目、会议、汇报、客户、数据、代码）最多当作“今天很忙/有点累”的背景，绝对不要向对方复述内容或汇报进度。',
     '- 如果此刻实在没什么可说的，只输出 <skip>。',
   ]
     .filter((line) => line !== '')

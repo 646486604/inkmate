@@ -346,7 +346,7 @@ export function ChatRoomPage() {
             ),
           onMessage: (message) => setMessages((current) => upsert(current, message)),
           onDone: (data) => {
-            setMessages((current) => upsert(current, data.message));
+            if (data.message) setMessages((current) => upsert(current, data.message!));
             if (data.error) setError(data.error);
             finishStream();
           },
@@ -459,7 +459,7 @@ export function ChatRoomPage() {
               ),
             onMessage: (message) => setMessages((current) => upsert(current, message)),
             onDone: (data) => {
-              setMessages((current) => upsert(current, data.message));
+              if (data.message) setMessages((current) => upsert(current, data.message!));
               if (data.error) setError(data.error);
               finishStream();
             },
@@ -518,7 +518,7 @@ export function ChatRoomPage() {
             ),
           onMessage: (message) => setMessages((current) => upsert(current, message)),
           onDone: (data) => {
-            setMessages((current) => upsert(current, data.message));
+            if (data.message) setMessages((current) => upsert(current, data.message!));
             if (data.error) setError(data.error);
             finishStream();
           },

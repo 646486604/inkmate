@@ -10,7 +10,8 @@ export interface StreamStart {
 }
 
 export interface StreamDone {
-  message: MessagePublic;
+  /** 只约定时间、没产生可见消息时可能没有 message */
+  message?: MessagePublic;
   interrupted?: boolean;
   error?: string;
 }

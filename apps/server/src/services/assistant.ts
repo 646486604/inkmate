@@ -16,6 +16,7 @@ import {
   touchChat,
 } from '../db/chats.js';
 import { getMemory } from '../db/memory.js';
+import { createPromise, listUpcomingPromises } from '../db/promises.js';
 import { getWorldEntriesForCharacter, type InjectedWorldEntry } from '../db/world-books.js';
 import { HttpError } from '../lib/http-error.js';
 import { buildChatMessages, buildGroupMessages } from '../llm/prompt.js';
@@ -33,11 +34,21 @@ type ReplyPart =
   | { type: 'sticker'; url: string; desc: string }
   | { type: 'descImage'; content: string }
   | { type: 'voice'; content: string; seconds: number }
-  | { type: 'packet'; content: string; amount: number };
+  | { type: 'packet'; content: string; amount: number }
+  | { type: 'promise'; dueAt: number; note: string };
 
 const IMAGE_LINE = /^\s*\[(?:图片|图像|照片|image)\s*[:：]\s*(.+?)\]\s*$/i;
 const VOICE_LINE = /^\s*\[(?:语音|voice)\s*[:：]\s*(.*?)\]\s*$/i;
 const PACKET_LINE = /^\s*\[(?:红包|red-?packet)\s*[:：]\s*(.+?)\]\s*$/i;
+const PROMISE_LINE = /^\s*\[(?:约|约定|提醒|remind)\s*[:：]\s*(\d{1,2})\s*[:：]\s*(\d{2})\s*([^\]]*?)\]\s*$/i;
+
+/** 约定时间：今天该时刻还没到就今天，过了就明天 */
+function nextDueAt(hour: number, minute: number): number {
+  const due = new Date();
+  due.setHours(Math.min(23, Math.max(0, hour)), Math.min(59, Math.max(0, minute)), 0, 0);
+  if (due.getTime() <= Date.now()) due.setDate(due.getDate() + 1);
+  return due.getTime();
+}
 
 /** 没有真音频，按字数估个时长（中文大概 4 字/秒） */
 function estimateSeconds(text: string): number {
@@ -99,6 +110,18 @@ function parseReply(raw: string, stickers: StickerPublic[]): ReplyPart[] {
       });
       continue;
     }
+    const promiseMatch = PROMISE_LINE.exec(line);
+    if (promiseMatch) {
+      const hour = Number(promiseMatch[1]);
+      const minute = Number(promiseMatch[2]);
+      flush();
+      parts.push({
+        type: 'promise',
+        dueAt: nextDueAt(hour, minute),
+        note: (promiseMatch[3] ?? '').trim(),
+      });
+      continue;
+    }
     buffer.push(line);
   }
   flush();
@@ -113,7 +136,7 @@ function parseReply(raw: string, stickers: StickerPublic[]): ReplyPart[] {
     }
     const content = part.content
       .replace(
-        /\[(?:表情|sticker|图片|图像|照片|image|语音|voice|红包|red-?packet)\s*[:：][^\]]*\]/gi,
+        /\[(?:表情|sticker|图片|图像|照片|image|语音|voice|红包|red-?packet|约|约定|提醒|remind)\s*[:：][^\]]*\]/gi,
         '',
       )
       .trim();
@@ -274,6 +297,7 @@ export async function streamAssistantReply(options: {
         schedule: schedule ?? undefined,
         weather,
         stickers: stickerLibrary,
+        promises: listUpcomingPromises(chatId),
       });
 
   reply.hijack();
@@ -306,10 +330,22 @@ export async function streamAssistantReply(options: {
       throw new HttpError(502, '模型没有返回内容');
     }
 
+    // 「[约:20:30 …]」只写一条定时记录，到点由调度器生成主动消息
+    for (const part of parts) {
+      if (part.type !== 'promise') continue;
+      createPromise({
+        chatId,
+        characterId: character.id,
+        dueAt: part.dueAt,
+        note: part.note,
+      });
+    }
+
     const savedMessages: MessagePublic[] = [];
     // 同一毫秒插入的多条消息要保证顺序，按解析出来的先后各留 1ms
     let stamp = Date.now();
     for (const part of parts) {
+      if (part.type === 'promise') continue;
       const kind =
         part.type === 'text'
           ? 'text'

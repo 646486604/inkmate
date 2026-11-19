@@ -85,6 +85,19 @@ CREATE TABLE IF NOT EXISTS chat_members (
   PRIMARY KEY (chat_id, character_id)
 );
 
+-- 角色在聊天里答应过的“某个时间来找你”，到点由调度器生成一条主动消息
+CREATE TABLE IF NOT EXISTS chat_promises (
+  id TEXT PRIMARY KEY,
+  chat_id TEXT NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+  character_id TEXT NOT NULL,
+  due_at INTEGER NOT NULL,
+  note TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'pending',
+  message_id TEXT,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_promises_due ON chat_promises(status, due_at);
+
 CREATE TABLE IF NOT EXISTS world_books (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,

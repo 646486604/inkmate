@@ -287,6 +287,7 @@ export function deleteChat(id: string): boolean {
   try {
     db.prepare('DELETE FROM messages WHERE chat_id = ?').run(id);
     db.prepare('DELETE FROM chat_members WHERE chat_id = ?').run(id);
+    db.prepare('DELETE FROM chat_promises WHERE chat_id = ?').run(id);
     db.prepare('DELETE FROM chats WHERE id = ?').run(id);
     db.exec('COMMIT');
     return true;
