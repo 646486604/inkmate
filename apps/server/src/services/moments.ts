@@ -8,15 +8,17 @@ import {
   getMomentRow,
   hasMomentJobs,
   hasPendingCommentJob,
+  hasSocialLike,
   incrementMomentJobAttempts,
   likeAsCharacter,
+  likeAsSocial,
   listDueMomentJobs,
   markMomentJobDone,
   markMomentJobSkipped,
   recentCharacterMomentContents,
   type MomentJobRow,
 } from '../db/moments.js';
-import { getRecentMessages, getPrivateChatForCharacter } from '../db/chats.js';
+import { getChatRow, getRecentMessages, getPrivateChatForCharacter } from '../db/chats.js';
 import { getMemory } from '../db/memory.js';
 import { getPlan, currentBeat } from '../db/schedules.js';
 import { getWorldEntriesForCharacter } from '../db/world-books.js';
@@ -72,8 +74,7 @@ function formatMemory(character: CharacterPublic, chatId: string): string {
   return parts.join('\n');
 }
 
-function parseMomentOutput(raw: string): { content: string; mood: string } | null {
-  const text = raw.trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
+function parseMomentOutput(raw: string): { content: string; mood: string } | null {  const text = raw.trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
   const start = text.indexOf('{');
   const end = text.lastIndexOf('}');
   if (start >= 0 && end > start) {
@@ -116,8 +117,57 @@ function parseCommentOutput(raw: string): string | null {
   return text.slice(0, 500);
 }
 
-function buildMomentPrompt(character: CharacterPublic, scheduledAt: number): string {
-  const date = dateKeyOf(scheduledAt);
+export interface SocialPerson {
+  name: string;
+  description: string;
+}
+
+/** 从人设卡里读「社交圈 / 人际关系」这一段，拿到会来互动的人 */
+export function parseSocialCircle(persona: string): SocialPerson[] {
+  const people: SocialPerson[] = [];
+  const lines = persona.split('\n');
+  let inSection = false;
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) {
+      if (inSection) inSection = false;
+      continue;
+    }
+    const heading = /^[【\[]?\s*(?:社交圈|人际关系|社会关系|人物关系|朋友圈)\s*[】\]]?\s*(?:[:：].*)?$/.exec(
+      line.replace(/^#+\s*/, ''),
+    );
+    if (heading) {
+      inSection = true;
+      // 「社交圈：A（同事）、B（同学）」这种一行写完的也支持
+      const inline = /(?:[:：])\s*(.+)$/.exec(line);
+      if (inline?.[1]) {
+        for (const part of inline[1].split(/[、,，]/)) {
+          const match = /^([^（(：:]{1,20})\s*(?:[（(]([^）)]*)[）)])?/.exec(part.trim());
+          if (match?.[1]) {
+            people.push({ name: match[1].trim(), description: (match[2] ?? '').trim() });
+          }
+        }
+      }
+      continue;
+    }
+    if (!inSection) continue;
+    if (/^[【\[]|^#/.test(line)) {
+      inSection = false;
+      continue;
+    }
+    const cleaned = line.replace(/^[-•·*]\s*/, '');
+    const match = /^([^：:（(]{1,20})\s*(?:[：:（(]\s*([^）)]*)[）)]?)?\s*(.*)$/.exec(cleaned);
+    if (match?.[1]) {
+      people.push({
+        name: match[1].trim(),
+        description: `${match[2] ?? ''} ${match[3] ?? ''}`.trim(),
+      });
+    }
+  }
+  return people.filter((person) => person.name && person.name.length <= 20).slice(0, 6);
+}
+
+function buildMomentPrompt(character: CharacterPublic, scheduledAt: number): string {  const date = dateKeyOf(scheduledAt);
   const plan = getPlan(character.id, date);
   const beat = currentBeat(character.id, date, scheduledAt);
   const chat = getPrivateChatForCharacter(character.id);
@@ -187,12 +237,14 @@ async function processPublishJob(job: MomentJobRow, logger: LoggerLike): Promise
       return null;
     }
     const plan = getPlan(character.id, dateKeyOf(job.scheduled_at));
+    const chat = getPrivateChatForCharacter(character.id);
     const moment = createMoment({
       authorType: 'character',
       authorId: character.id,
       content: parsed.content,
       mood: parsed.mood,
       planId: plan?.id ?? null,
+      chatId: chat?.id ?? '',
     });
     markMomentJobDone(job.id);
     publish('moment', { moment });
@@ -311,13 +363,142 @@ async function processCommentJob(job: MomentJobRow, logger: LoggerLike): Promise
   }
 }
 
-async function tickJobs(logger: LoggerLike): Promise<void> {
-  const jobs = listDueMomentJobs(Date.now());
+/** 社交圈的人对动态的反应：点赞 + 留言，1–2 个人，不重复 */
+async function processSocialJob(job: MomentJobRow, logger: LoggerLike): Promise<void> {
+  if (!job.moment_id) {
+    markMomentJobSkipped(job.id);
+    return;
+  }
+  const momentRow = getMomentRow(job.moment_id);
+  if (!momentRow) {
+    markMomentJobSkipped(job.id);
+    return;
+  }
+  const chat = momentRow.chat_id ? getChatRow(momentRow.chat_id) : null;
+  const characterId =
+    momentRow.author_type === 'character' ? momentRow.author_id : chat?.character_id ?? '';
+  const character = characterId ? getCharacter(characterId) : null;
+  if (!character) {
+    markMomentJobSkipped(job.id);
+    return;
+  }
+  const circle = parseSocialCircle(character.persona);
+  if (circle.length === 0) {
+    markMomentJobSkipped(job.id);
+    return;
+  }
+
+  const user = getPrimaryUser();
+  if (!user) {
+    markMomentJobSkipped(job.id);
+    return;
+  }
+  const moment = getMoment(job.moment_id, user.id);
+  if (!moment) {
+    markMomentJobSkipped(job.id);
+    return;
+  }
+
+  try {
+    const config = resolveProviderForCharacter(character);
+    const lastUserComment = [...moment.comments]
+      .reverse()
+      .find((comment) => comment.authorType === 'user');
+    const raw = await completeChat(
+      config,
+      [
+        {
+          role: 'system',
+          content:
+            '你是朋友圈互动生成器。只输出合法 JSON，不要 Markdown、不要解释。',
+        },
+        {
+          role: 'user',
+          content: [
+            `「${character.name}」发了一条动态。`,
+            `动态内容：${moment.content}`,
+            '',
+            '【社交圈】',
+            ...circle.map((person) => `- ${person.name}：${person.description || '朋友'}`),
+            '',
+            lastUserComment ? `用户评论：${lastUserComment.content}` : '用户刚点了赞。',
+            '',
+            '从中选 1–2 个人来互动：可以只点赞，也可以留一句话。语气符合他们和主角的关系，20 字以内，不要提 AI。',
+            '不要选主角本人。',
+            '只输出 JSON：{"likes":["名字"],"comments":[{"name":"名字","content":"..."}]}',
+          ].join('\n'),
+        },
+      ],
+      { maxTokens: 220, temperature: 0.95 },
+    );
+
+    const start = raw.indexOf('{');
+    const end = raw.lastIndexOf('}');
+    if (start < 0 || end <= start) {
+      markMomentJobSkipped(job.id);
+      return;
+    }
+    const parsed = JSON.parse(raw.slice(start, end + 1)) as {
+      likes?: unknown;
+      comments?: unknown;
+    };
+    const known = new Set(circle.map((person) => person.name));
+    const likes = Array.isArray(parsed.likes)
+      ? parsed.likes.map((item) => String(item).trim()).filter((name) => known.has(name))
+      : [];
+    const comments = Array.isArray(parsed.comments)
+      ? (parsed.comments as Array<{ name?: unknown; content?: unknown }>)
+          .map((item) => ({
+            name: String(item?.name ?? '').trim(),
+            content: String(item?.content ?? '').trim(),
+          }))
+          .filter((item) => known.has(item.name) && item.content)
+          .slice(0, 2)
+      : [];
+
+    let touched = false;
+    for (const name of likes) {
+      if (hasSocialLike(moment.id, name)) continue;
+      likeAsSocial(moment.id, name);
+      touched = true;
+    }
+    for (const item of comments) {
+      const duplicated = moment.comments.some(
+        (comment) =>
+          comment.authorType === 'social' &&
+          comment.authorId === item.name &&
+          comment.content.replace(/\s+/g, '') === item.content.replace(/\s+/g, ''),
+      );
+      if (duplicated) continue;
+      const comment = addComment({
+        momentId: moment.id,
+        authorType: 'social',
+        authorId: item.name,
+        content: item.content.slice(0, 300),
+      });
+      likeAsSocial(moment.id, item.name);
+      publish('moment_comment', { momentId: moment.id, comment });
+      touched = true;
+    }
+    markMomentJobDone(job.id);
+    if (touched) logger.info({ momentId: moment.id, characterId }, '[moments] social reacted');
+  } catch (error) {
+    const attempts = incrementMomentJobAttempts(job.id);
+    logger.warn(
+      { err: error instanceof Error ? error.message : String(error), jobId: job.id, attempts },
+      '[moments] social failed',
+    );
+    if (attempts >= 3) markMomentJobSkipped(job.id);
+  }
+}
+
+async function tickJobs(logger: LoggerLike): Promise<void> {  const jobs = listDueMomentJobs(Date.now());
   for (const job of jobs) {
     if (jobInFlight.has(job.id)) continue;
     jobInFlight.add(job.id);
     try {
       if (job.kind === 'publish') await processPublishJob(job, logger);
+      else if (job.kind === 'social') await processSocialJob(job, logger);
       else await processCommentJob(job, logger);
     } finally {
       jobInFlight.delete(job.id);
@@ -434,6 +615,15 @@ export function enqueueMomentReply(momentId: string): void {
     momentId,
     scheduledAt: Date.now() + 30_000 + Math.floor(Math.random() * 60_000),
   });
+  // 社交圈的人也可能跟着有反应
+  if (parseSocialCircle(character.persona).length > 0) {
+    createMomentJob({
+      kind: 'social',
+      characterId: character.id,
+      momentId,
+      scheduledAt: Date.now() + 60_000 + Math.floor(Math.random() * 60_000),
+    });
+  }
 }
 
 export function startMomentScheduler(logger: LoggerLike): () => void {
@@ -455,6 +645,7 @@ export async function createUserMoment(
   userId: string,
   content: string,
   images: string[],
+  chatId?: string,
 ): Promise<MomentPublic> {
   if (!content.trim()) throw new HttpError(400, '内容不能为空');
   const moment = createMoment({
@@ -462,6 +653,7 @@ export async function createUserMoment(
     authorId: userId,
     content: content.trim(),
     images,
+    chatId: chatId ?? '',
   });
   enqueueUserMomentReactions(moment.id);
   publish('moment', { moment });

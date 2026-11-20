@@ -785,7 +785,7 @@ export function ChatRoomPage() {
         <button
           className="min-w-0 flex-1 text-left"
           onClick={() => {
-            if (!isGroup && chat?.characterId) navigate(`/characters/${chat.characterId}`);
+            if (!isGroup && chat?.characterId) navigate(`/characters/${chat.characterId}?chatId=${chat.id}`);
           }}
         >
           <p className="truncate text-[14px] font-medium">{characterName}</p>

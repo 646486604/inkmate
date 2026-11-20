@@ -37,4 +37,15 @@ export function migrate(db: DatabaseSync): void {
   addColumn(db, 'chats', 'user_persona', "TEXT NOT NULL DEFAULT ''");
   addColumn(db, 'chats', 'background', "TEXT NOT NULL DEFAULT ''");
   addColumn(db, 'chats', 'bubble_json', "TEXT NOT NULL DEFAULT ''");
+
+  // 动态绑定到会话
+  addColumn(db, 'moments', 'chat_id', "TEXT NOT NULL DEFAULT ''");
+  db.exec(`
+    UPDATE moments SET chat_id = (
+      SELECT c.id FROM chats c
+      WHERE c.kind = 'private' AND c.character_id = moments.author_id
+      ORDER BY c.created_at ASC LIMIT 1
+    )
+    WHERE chat_id = '' AND author_type = 'character'
+  `);
 }

@@ -22,7 +22,12 @@ const momentRoutes: FastifyPluginAsync = async (app) => {
   app.addHook('preHandler', requireAuth);
 
   app.get('/', async (req) => {
-    const query = req.query as { limit?: string; before?: string; characterId?: string };
+    const query = req.query as {
+      limit?: string;
+      before?: string;
+      characterId?: string;
+      chatId?: string;
+    };
     const limit = Number(query.limit ?? 20);
     const before = query.before ? Number(query.before) : undefined;
     return {
@@ -31,13 +36,20 @@ const momentRoutes: FastifyPluginAsync = async (app) => {
         Number.isFinite(limit) ? limit : 20,
         before && Number.isFinite(before) ? before : undefined,
         query.characterId || undefined,
+        query.chatId || undefined,
       ),
     };
   });
 
   app.post('/', async (req, reply) => {
     const input = momentInputSchema.parse(req.body);
-    const moment = await createUserMoment(req.user!.id, input.content, input.images);
+    const chatId = (req.body as { chatId?: unknown })?.chatId;
+    const moment = await createUserMoment(
+      req.user!.id,
+      input.content,
+      input.images,
+      typeof chatId === 'string' ? chatId : undefined,
+    );
     return reply.code(201).send({ moment });
   });
 

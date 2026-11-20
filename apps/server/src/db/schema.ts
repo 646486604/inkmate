@@ -207,9 +207,11 @@ CREATE TABLE IF NOT EXISTS moments (
   images_json TEXT NOT NULL DEFAULT '[]',
   mood TEXT NOT NULL DEFAULT '',
   plan_id TEXT,
+  chat_id TEXT NOT NULL DEFAULT '',
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_moments_created ON moments(created_at);
+CREATE INDEX IF NOT EXISTS idx_moments_chat ON moments(chat_id, created_at);
 
 CREATE TABLE IF NOT EXISTS moment_likes (
   moment_id TEXT NOT NULL REFERENCES moments(id) ON DELETE CASCADE,

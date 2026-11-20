@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Loader2, MessageCircle, Sparkles } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { ArrowLeft, Heart, Loader2, MessageCircle, Send, Sparkles } from 'lucide-react';
 import type { CharacterPublic, MomentPublic } from '@inkmate/shared';
 import { api, ApiError } from '../lib/api';
 
@@ -15,6 +15,8 @@ function formatDate(timestamp: number): string {
 
 export function CharacterProfilePage() {
   const { id } = useParams<{ id: string }>();
+  const [search] = useSearchParams();
+  const chatId = search.get('chatId') ?? '';
   const navigate = useNavigate();
   const [character, setCharacter] = useState<CharacterPublic | null>(null);
   const [moments, setMoments] = useState<MomentPublic[] | null>(null);
@@ -22,12 +24,24 @@ export function CharacterProfilePage() {
   const [starting, setStarting] = useState(false);
   const [personaOpen, setPersonaOpen] = useState(false);
   const [error, setError] = useState('');
+  const [commentOpenId, setCommentOpenId] = useState('');
+  const [commentDraft, setCommentDraft] = useState('');
+  const [commentBusy, setCommentBusy] = useState(false);
+  const [likeBusyId, setLikeBusyId] = useState('');
+  const commentRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!id) return;
     let alive = true;
     setLoading(true);
-    Promise.all([api.characters(), api.moments({ characterId: id, limit: 30 })])
+    Promise.all([
+      api.characters(),
+      api.moments(
+        chatId
+          ? { chatId, limit: 30 }
+          : { characterId: id, limit: 30 },
+      ),
+    ])
       .then(([charactersResult, momentsResult]) => {
         if (!alive) return;
         setCharacter(charactersResult.characters.find((item) => item.id === id) ?? null);
@@ -42,10 +56,15 @@ export function CharacterProfilePage() {
     return () => {
       alive = false;
     };
-  }, [id]);
+  }, [id, chatId]);
 
   async function startChat() {
-    if (!character || starting) return;
+    if (starting) return;
+    if (chatId) {
+      navigate(`/chats/${chatId}`);
+      return;
+    }
+    if (!character) return;
     setStarting(true);
     setError('');
     try {
@@ -55,6 +74,46 @@ export function CharacterProfilePage() {
       setError(err instanceof ApiError ? err.message : '打开会话失败');
     } finally {
       setStarting(false);
+    }
+  }
+
+  function replaceMoment(next: MomentPublic) {
+    setMoments((current) =>
+      current ? current.map((item) => (item.id === next.id ? next : item)) : current,
+    );
+  }
+
+  async function toggleLike(moment: MomentPublic) {
+    if (likeBusyId) return;
+    setLikeBusyId(moment.id);
+    try {
+      const result = await api.likeMoment(moment.id);
+      replaceMoment({
+        ...moment,
+        likedByMe: result.liked,
+        likeCount: result.likeCount,
+      });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '操作失败');
+    } finally {
+      setLikeBusyId('');
+    }
+  }
+
+  async function sendComment(moment: MomentPublic) {
+    const content = commentDraft.trim();
+    if (!content || commentBusy) return;
+    setCommentBusy(true);
+    setError('');
+    try {
+      const result = await api.commentMoment(moment.id, { content });
+      replaceMoment({ ...moment, comments: [...moment.comments, result.comment] });
+      setCommentDraft('');
+      commentRef.current?.focus();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '评论失败');
+    } finally {
+      setCommentBusy(false);
     }
   }
 
@@ -125,7 +184,7 @@ export function CharacterProfilePage() {
           onClick={() => void startChat()}
         >
           {starting ? <Loader2 size={15} className="animate-spin" /> : <MessageCircle size={15} />}
-          开始聊天
+          {chatId ? '回到聊天' : '开始聊天'}
         </button>
 
         <section className="card p-4">
@@ -172,9 +231,9 @@ export function CharacterProfilePage() {
               <span className="grid h-12 w-12 place-items-center rounded-full bg-[var(--paper-strong)] text-[var(--faint)]">
                 <Sparkles size={20} />
               </span>
-              <p className="mt-3 text-[12px]">还没发过动态</p>
+              <p className="mt-3 text-[12px]">这个聊天里还没发过动态</p>
               <p className="mt-1 text-[10px] text-[var(--faint)]">
-                在角色的日程里允许发动态后，TA 会自己发。
+                这里只显示当前聊天里的动态，聊天删了它们也会一起消失。
               </p>
             </div>
           ) : (
@@ -207,10 +266,73 @@ export function CharacterProfilePage() {
                       ))}
                     </div>
                   ) : null}
+
                   <div className="mt-2 flex items-center gap-3 text-[10px] text-[var(--faint)]">
-                    <span>赞 {moment.likeCount}</span>
-                    <span>评论 {moment.comments.length}</span>
+                    <button
+                      className={`flex items-center gap-1 ${moment.likedByMe ? 'text-[var(--accent)]' : ''}`}
+                      onClick={() => void toggleLike(moment)}
+                      disabled={likeBusyId === moment.id}
+                    >
+                      <Heart
+                        size={12}
+                        fill={moment.likedByMe ? 'currentColor' : 'none'}
+                      />
+                      赞 {moment.likeCount}
+                    </button>
+                    <button
+                      className="flex items-center gap-1"
+                      onClick={() => {
+                        setCommentOpenId((current) => (current === moment.id ? '' : moment.id));
+                        setCommentDraft('');
+                      }}
+                    >
+                      <MessageCircle size={12} />
+                      评论 {moment.comments.length}
+                    </button>
                   </div>
+
+                  {moment.comments.length > 0 ? (
+                    <ul className="mt-2 space-y-1 rounded-xl bg-[var(--paper-strong)] px-3 py-2">
+                      {moment.comments.map((comment) => (
+                        <li key={comment.id} className="text-[11px] leading-relaxed">
+                          <span className="text-[var(--accent-strong)]">
+                            {comment.authorName}：
+                          </span>
+                          <span className="text-[var(--muted)]">{comment.content}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+
+                  {commentOpenId === moment.id ? (
+                    <div className="mt-2 flex items-center gap-2">
+                      <input
+                        ref={commentRef}
+                        className="field h-9 min-h-9 flex-1 text-[11px]"
+                        value={commentDraft}
+                        maxLength={200}
+                        placeholder="说点什么…"
+                        onChange={(event) => setCommentDraft(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            event.preventDefault();
+                            void sendComment(moment);
+                          }
+                        }}
+                      />
+                      <button
+                        className="btn btn-accent h-9 min-h-9 px-3"
+                        disabled={!commentDraft.trim() || commentBusy}
+                        onClick={() => void sendComment(moment)}
+                      >
+                        {commentBusy ? (
+                          <Loader2 size={13} className="animate-spin" />
+                        ) : (
+                          <Send size={13} />
+                        )}
+                      </button>
+                    </div>
+                  ) : null}
                 </article>
               ))}
             </div>

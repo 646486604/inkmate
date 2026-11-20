@@ -306,11 +306,12 @@ export const api = {
       method: 'POST',
     }),
 
-  moments: (options: { limit?: number; before?: number; characterId?: string } = {}) => {
+  moments: (options: { limit?: number; before?: number; characterId?: string; chatId?: string } = {}) => {
     const params = new URLSearchParams();
     if (options.limit) params.set('limit', String(options.limit));
     if (options.before) params.set('before', String(options.before));
     if (options.characterId) params.set('characterId', options.characterId);
+    if (options.chatId) params.set('chatId', options.chatId);
     const query = params.toString();
     return request<{ moments: MomentPublic[] }>(`/api/moments${query ? `?${query}` : ''}`);
   },

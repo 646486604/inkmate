@@ -10,6 +10,7 @@ import type {
   MessageRole,
 } from '@inkmate/shared';
 import { getDb } from './index.js';
+import { deleteMomentsForChat } from './moments.js';
 import { getCharacter } from './characters.js';
 
 export interface ChatRow {
@@ -288,6 +289,7 @@ export function deleteChat(id: string): boolean {
     db.prepare('DELETE FROM messages WHERE chat_id = ?').run(id);
     db.prepare('DELETE FROM chat_members WHERE chat_id = ?').run(id);
     db.prepare('DELETE FROM chat_promises WHERE chat_id = ?').run(id);
+    deleteMomentsForChat(id);
     db.prepare('DELETE FROM chats WHERE id = ?').run(id);
     db.exec('COMMIT');
     return true;

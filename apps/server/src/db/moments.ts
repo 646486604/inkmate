@@ -16,6 +16,7 @@ interface MomentRow {
   images_json: string;
   mood: string;
   plan_id: string | null;
+  chat_id: string;
   created_at: number;
 }
 
@@ -30,7 +31,7 @@ interface CommentRow {
 
 export interface MomentJobRow {
   id: string;
-  kind: 'publish' | 'comment';
+  kind: 'publish' | 'comment' | 'social';
   character_id: string;
   moment_id: string | null;
   scheduled_at: number;
@@ -49,7 +50,7 @@ function parseImages(json: string): string[] {
   return [];
 }
 
-function authorInfo(authorType: MomentAuthorType, authorId: string) {
+function authorInfo(authorType: MomentAuthorType, authorId: string, chatId?: string) {
   if (authorType === 'character') {
     const character = getCharacter(authorId);
     return {
@@ -59,17 +60,30 @@ function authorInfo(authorType: MomentAuthorType, authorId: string) {
       color: character?.color ?? '#b4472f',
     };
   }
+  if (authorType === 'social') {
+    // 社交圈里的人：名字直接存在 author_id 里，没有头像
+    return { name: authorId, nickname: '', avatar: '', color: '#8a6d5c' };
+  }
+  // 用户：优先用这个会话里设定的名字，和聊天里保持一致
+  const chatName = chatId ? getChatUserName(chatId) : '';
   const user = getPrimaryUser();
   return {
-    name: user?.displayName || '我',
+    name: chatName || user?.displayName || '我',
     nickname: '',
     avatar: user?.avatar ?? '',
     color: '#b4472f',
   };
 }
 
-function toComment(row: CommentRow): MomentCommentPublic {
-  const info = authorInfo(row.author_type, row.author_id);
+function getChatUserName(chatId: string): string {
+  const row = getDb()
+    .prepare('SELECT user_name FROM chats WHERE id = ?')
+    .get(chatId) as { user_name?: string } | undefined;
+  return row?.user_name?.trim() ?? '';
+}
+
+function toComment(row: CommentRow, chatId?: string): MomentCommentPublic {
+  const info = authorInfo(row.author_type, row.author_id, chatId);
   return {
     id: row.id,
     momentId: row.moment_id,
@@ -84,15 +98,15 @@ function toComment(row: CommentRow): MomentCommentPublic {
   };
 }
 
-function commentsFor(momentId: string): MomentCommentPublic[] {
+function commentsFor(momentId: string, chatId?: string): MomentCommentPublic[] {
   const rows = getDb()
     .prepare('SELECT * FROM moment_comments WHERE moment_id = ? ORDER BY created_at ASC')
     .all(momentId) as unknown as CommentRow[];
-  return rows.map(toComment);
+  return rows.map((row) => toComment(row, chatId));
 }
 
 function toMoment(row: MomentRow, userId: string): MomentPublic {
-  const info = authorInfo(row.author_type, row.author_id);
+  const info = authorInfo(row.author_type, row.author_id, row.chat_id);
   const likeCount = (
     getDb()
       .prepare('SELECT COUNT(*) AS c FROM moment_likes WHERE moment_id = ?')
@@ -119,7 +133,7 @@ function toMoment(row: MomentRow, userId: string): MomentPublic {
     createdAt: row.created_at,
     likeCount,
     likedByMe,
-    comments: commentsFor(row.id),
+    comments: commentsFor(row.id, row.chat_id),
   };
 }
 
@@ -128,12 +142,14 @@ export function listMoments(
   limit = 20,
   before?: number,
   characterId?: string,
+  chatId?: string,
 ): MomentPublic[] {
   const rows = getDb()
     .prepare(
       `SELECT * FROM moments
        WHERE (? IS NULL OR created_at < ?)
          AND (? IS NULL OR (author_type = 'character' AND author_id = ?))
+         AND (? IS NULL OR chat_id = ?)
        ORDER BY created_at DESC LIMIT ?`,
     )
     .all(
@@ -141,6 +157,8 @@ export function listMoments(
       before ?? null,
       characterId ?? null,
       characterId ?? null,
+      chatId ?? null,
+      chatId ?? null,
       Math.min(50, Math.max(1, limit)),
     ) as unknown as MomentRow[];
   return rows.map((row) => toMoment(row, userId));
@@ -160,14 +178,15 @@ export function createMoment(input: {
   images?: string[];
   mood?: string;
   planId?: string | null;
+  chatId?: string;
 }): MomentPublic {
   const id = randomUUID();
   const now = Date.now();
   getDb()
     .prepare(
       `INSERT INTO moments
-        (id, author_type, author_id, content, images_json, mood, plan_id, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        (id, author_type, author_id, content, images_json, mood, plan_id, chat_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       id,
@@ -177,6 +196,7 @@ export function createMoment(input: {
       JSON.stringify(input.images ?? []),
       input.mood ?? '',
       input.planId ?? null,
+      input.chatId ?? '',
       now,
     );
   const user = getPrimaryUser();
@@ -188,6 +208,19 @@ export function createMoment(input: {
 export function deleteMoment(id: string): boolean {
   const result = getDb().prepare('DELETE FROM moments WHERE id = ?').run(id);
   return Number(result.changes) > 0;
+}
+
+/** 会话删掉时，它的动态一起消失 */
+export function deleteMomentsForChat(chatId: string): void {
+  if (!chatId) return;
+  const db = getDb();
+  db.prepare(
+    'DELETE FROM moment_comments WHERE moment_id IN (SELECT id FROM moments WHERE chat_id = ?)',
+  ).run(chatId);
+  db.prepare(
+    'DELETE FROM moment_likes WHERE moment_id IN (SELECT id FROM moments WHERE chat_id = ?)',
+  ).run(chatId);
+  db.prepare('DELETE FROM moments WHERE chat_id = ?').run(chatId);
 }
 
 export function recentCharacterMomentContents(characterId: string, limit = 10): string[] {
@@ -226,12 +259,30 @@ export function toggleLike(
   return { liked: !existing, likeCount };
 }
 
-export function likeAsCharacter(momentId: string, characterId: string): void {
-  getDb()
+export function likeAsCharacter(momentId: string, characterId: string): void {  getDb()
     .prepare(
       "INSERT OR IGNORE INTO moment_likes (moment_id, actor_type, actor_id, created_at) VALUES (?, 'character', ?, ?)",
     )
     .run(momentId, characterId, Date.now());
+}
+
+/** 社交圈的人点赞：名字直接当 author_id */
+export function likeAsSocial(momentId: string, name: string): void {
+  getDb()
+    .prepare(
+      "INSERT OR IGNORE INTO moment_likes (moment_id, actor_type, actor_id, created_at) VALUES (?, 'social', ?, ?)",
+    )
+    .run(momentId, name, Date.now());
+}
+
+export function hasSocialLike(momentId: string, name: string): boolean {
+  return Boolean(
+    getDb()
+      .prepare(
+        "SELECT 1 AS yes FROM moment_likes WHERE moment_id = ? AND actor_type = 'social' AND actor_id = ?",
+      )
+      .get(momentId, name),
+  );
 }
 
 export function addComment(input: {
@@ -251,7 +302,8 @@ export function addComment(input: {
   const row = getDb()
     .prepare('SELECT * FROM moment_comments WHERE id = ?')
     .get(id) as unknown as CommentRow;
-  return toComment(row);
+  const moment = getMomentRow(input.momentId);
+  return toComment(row, moment?.chat_id);
 }
 
 export function getMomentRow(id: string): MomentRow | null {
@@ -263,7 +315,7 @@ export function getMomentRow(id: string): MomentRow | null {
 }
 
 export function createMomentJob(input: {
-  kind: 'publish' | 'comment';
+  kind: 'publish' | 'comment' | 'social';
   characterId: string;
   momentId?: string | null;
   scheduledAt: number;

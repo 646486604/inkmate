@@ -361,7 +361,7 @@ export interface DayPlanPublic {
 
 // ── M4: 动态 ─────────────────────────────────────────────────────────
 
-export type MomentAuthorType = 'character' | 'user';
+export type MomentAuthorType = 'character' | 'user' | 'social';
 
 export interface MomentCommentPublic {
   id: string;
