@@ -117,6 +117,11 @@ async function neteaseGet(
     );
   }
   if (!response.ok) {
+    const data = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+    const failedCode = typeof data?.code === 'number' ? data.code : null;
+    if (failedCode === 460 || failedCode === -460) {
+      throw new HttpError(429, '网易云触发了风控，先歇十分钟再听；本地曲库不受影响。');
+    }
     throw new HttpError(502, `网易云边车返回 ${response.status}`);
   }
   const data = (await response.json().catch(() => null)) as Record<string, unknown> | null;
@@ -124,7 +129,7 @@ async function neteaseGet(
 
   // 边车把网易云的业务错误也放在 200 里，这里显式区分，避免“看起来加载成功但没歌”。
   const code = typeof data.code === 'number' ? data.code : null;
-  if (code === 460) {
+  if (code === 460 || code === -460) {
     throw new HttpError(429, '网易云触发了风控，先歇十分钟再听；本地曲库不受影响。');
   }
   if (code === 301) {
@@ -231,15 +236,18 @@ export async function getNeteaseLyrics(id: string): Promise<string> {
 }
 
 export async function resolveNeteaseStream(id: string): Promise<string> {
-  const data = await neteaseGet(
-    `/song/url/v1?id=${encodeURIComponent(id)}&level=exhigh`,
-  );
-  const list = data.data as Array<{ url?: string | null }> | undefined;
-  const url = list?.[0]?.url;
-  if (!url) {
-    throw new HttpError(404, '这首歌暂时无法播放（VIP/下架/版权限制）');
+  // 新版 /song/url/v1 在不少网络环境会直接返回 -460（网络环境风险），
+  // 而旧的 /song/url 仍能正常取到 320k/128k 地址；优先用旧接口，失败再降码率。
+  const attempts = ['br=320000', 'br=128000'];
+  for (const query of attempts) {
+    const data = await neteaseGet(
+      `/song/url?id=${encodeURIComponent(id)}&${query}`,
+    );
+    const list = data.data as Array<{ url?: string | null }> | undefined;
+    const url = list?.[0]?.url;
+    if (url) return url;
   }
-  return url;
+  throw new HttpError(404, '这首歌暂时无法播放（VIP/下架/版权限制）');
 }
 
 export async function proxyNeteaseStream(

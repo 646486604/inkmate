@@ -813,7 +813,7 @@ export function ChatRoomPage() {
                     }}
                   >
                     <CalendarDays size={12} className="mr-1.5 inline" />
-                    今天的计划
+                    今天的日程
                   </button>
                   <button
                     className="block w-full rounded-lg px-3 py-2 text-left hover:bg-[var(--accent-soft)]"
