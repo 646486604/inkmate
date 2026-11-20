@@ -46,6 +46,7 @@ export function CharacterForm({
   const [avatar, setAvatar] = useState(character?.avatar ?? '');
   const [persona, setPersona] = useState(character?.persona ?? '');
   const [greeting, setGreeting] = useState(character?.greeting ?? '');
+  const [socialCircle, setSocialCircle] = useState(character?.socialCircle ?? '');
   const [color, setColor] = useState(character?.color ?? '#b4472f');
   const [providerId, setProviderId] = useState(character?.providerId ?? '');
   const [model, setModel] = useState(character?.model ?? '');
@@ -122,6 +123,7 @@ export function CharacterForm({
         avatar,
         persona,
         greeting,
+        socialCircle,
         color,
         providerId: providerId || null,
         model,
@@ -205,6 +207,22 @@ export function CharacterForm({
             onChange={(event) => setGreeting(event.target.value)}
             placeholder="第一次打开聊天时，TA 说的第一句话"
           />
+        </label>
+
+        <label className="block">
+          <span className="mb-1.5 flex items-center justify-between text-[10px] tracking-[0.16em] text-[var(--muted)]">
+            社交圈（可选）
+            <span className="tracking-normal text-[var(--faint)]">一行一个人</span>
+          </span>
+          <textarea
+            className="field min-h-[84px] resize-y"
+            value={socialCircle}
+            onChange={(event) => setSocialCircle(event.target.value)}
+            placeholder={'李雷：同事，爱开玩笑\n韩梅梅：大学同学，说话直'}
+          />
+          <span className="mt-1 block text-[9px] leading-relaxed text-[var(--faint)]">
+            这些人会在 TA 的动态下面点赞、留言；写「名字：关系」就行，不用别的格式。
+          </span>
         </label>
 
         <div className="grid grid-cols-2 gap-3">

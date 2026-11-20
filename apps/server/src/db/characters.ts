@@ -21,6 +21,7 @@ export interface CharacterRow {
   provider_id: string | null;
   model: string;
   greeting: string;
+  social_circle: string;
   color: string;
   bubble_style: string;
   memory_limit: number;
@@ -46,6 +47,7 @@ function toPublic(row: CharacterRow): CharacterPublic {
     avatar: row.avatar,
     persona: row.persona,
     greeting: row.greeting,
+    socialCircle: row.social_circle ?? '',
     color: row.color,
     providerId: row.provider_id,
     model: row.model,
@@ -85,9 +87,9 @@ export function createCharacter(input: CharacterInput): CharacterPublic {
   getDb()
     .prepare(
       `INSERT INTO characters
-        (id, name, nickname, avatar, persona, provider_id, model, greeting, color,
+        (id, name, nickname, avatar, persona, provider_id, model, greeting, social_circle, color,
          bubble_style, memory_limit, initiative_json, state_json, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       id,
@@ -98,6 +100,7 @@ export function createCharacter(input: CharacterInput): CharacterPublic {
       input.providerId ?? null,
       input.model ?? '',
       input.greeting ?? '',
+      input.socialCircle ?? '',
       input.color ?? '#b4472f',
       'soft',
       input.memoryLimit ?? 40,
@@ -147,6 +150,10 @@ export function updateCharacter(id: string, patch: CharacterPatch): CharacterPub
   if (patch.greeting !== undefined) {
     sets.push('greeting = ?');
     values.push(patch.greeting);
+  }
+  if (patch.socialCircle !== undefined) {
+    sets.push('social_circle = ?');
+    values.push(patch.socialCircle);
   }
   if (patch.color !== undefined) {
     sets.push('color = ?');

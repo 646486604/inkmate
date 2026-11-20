@@ -103,6 +103,7 @@ export const characterInputSchema = z.object({
   avatar: z.string().trim().max(2000).optional().default(''),
   persona: z.string().trim().max(8000).optional().default(''),
   greeting: z.string().trim().max(2000).optional().default(''),
+  socialCircle: z.string().trim().max(2000).optional().default(''),
   color: z
     .string()
     .regex(/^#[0-9a-fA-F]{6}$/, '主题色格式不正确')
@@ -122,6 +123,7 @@ export const characterPatchSchema = z.object({
   avatar: z.string().trim().max(2000).optional(),
   persona: z.string().trim().max(8000).optional(),
   greeting: z.string().trim().max(2000).optional(),
+  socialCircle: z.string().trim().max(2000).optional(),
   color: z
     .string()
     .regex(/^#[0-9a-fA-F]{6}$/, '主题色格式不正确')
@@ -141,6 +143,7 @@ export interface CharacterPublic {
   avatar: string;
   persona: string;
   greeting: string;
+  socialCircle: string;
   color: string;
   providerId: string | null;
   model: string;

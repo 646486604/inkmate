@@ -122,49 +122,61 @@ export interface SocialPerson {
   description: string;
 }
 
-/** 从人设卡里读「社交圈 / 人际关系」这一段，拿到会来互动的人 */
-export function parseSocialCircle(persona: string): SocialPerson[] {
-  const people: SocialPerson[] = [];
-  const lines = persona.split('\n');
-  let inSection = false;
-  for (const raw of lines) {
-    const line = raw.trim();
-    if (!line) {
-      if (inSection) inSection = false;
-      continue;
+/** 读社交圈：优先用角色卡里单独填的那一栏，没填再从人设里找「社交圈」段落 */
+export function parseSocialCircle(text: string): SocialPerson[] {
+  const content = text.trim();
+  if (!content) return [];
+  const lines = content.split('\n');
+  const headingRe =
+    /^[【\[]?\s*(?:社交圈|人际关系|社会关系|人物关系|朋友圈)\s*[】\]]?\s*(?:[:：](.*))?$/;
+
+  const parseLines = (items: string[]): SocialPerson[] => {
+    const people: SocialPerson[] = [];
+    for (const raw of items) {
+      const line = raw.trim().replace(/^[-•·*]\s*/, '');
+      if (!line) continue;
+      if (/^[【\[]|^#/.test(line)) continue;
+      const match = /^([^：:（(—\-]{1,20})\s*(?:[：:（(—\-]+\s*([^）)]*)[）)]?)?\s*(.*)$/.exec(
+        line,
+      );
+      const name = match?.[1]?.trim();
+      if (!name) continue;
+      const description = `${match?.[2] ?? ''} ${match?.[3] ?? ''}`.trim();
+      people.push({ name, description });
     }
-    const heading = /^[【\[]?\s*(?:社交圈|人际关系|社会关系|人物关系|朋友圈)\s*[】\]]?\s*(?:[:：].*)?$/.exec(
-      line.replace(/^#+\s*/, ''),
-    );
-    if (heading) {
-      inSection = true;
-      // 「社交圈：A（同事）、B（同学）」这种一行写完的也支持
-      const inline = /(?:[:：])\s*(.+)$/.exec(line);
-      if (inline?.[1]) {
-        for (const part of inline[1].split(/[、,，]/)) {
-          const match = /^([^（(：:]{1,20})\s*(?:[（(]([^）)]*)[）)])?/.exec(part.trim());
-          if (match?.[1]) {
-            people.push({ name: match[1].trim(), description: (match[2] ?? '').trim() });
-          }
-        }
-      }
-      continue;
+    return people;
+  };
+
+  const headingIndex = lines.findIndex((line) =>
+    headingRe.test(line.trim().replace(/^#+\s*/, '')),
+  );
+  if (headingIndex >= 0) {
+    const inline = headingRe.exec(lines[headingIndex].trim().replace(/^#+\s*/, ''))?.[1];
+    if (inline?.trim()) {
+      const inlinePeople = inline
+        .split(/[、,，]/)
+        .map((part) => part.trim())
+        .filter(Boolean)
+        .map((part) => {
+          const match = /^([^（(：:]{1,20})\s*(?:[（(]([^）)]*)[）)])?/.exec(part);
+          return { name: match?.[1]?.trim() ?? '', description: (match?.[2] ?? '').trim() };
+        })
+        .filter((person) => person.name);
+      if (inlinePeople.length > 0) return inlinePeople.slice(0, 8);
     }
-    if (!inSection) continue;
-    if (/^[【\[]|^#/.test(line)) {
-      inSection = false;
-      continue;
+    const section: string[] = [];
+    for (let i = headingIndex + 1; i < lines.length; i += 1) {
+      const line = lines[i].trim();
+      if (!line) break;
+      if (/^[【\[]|^#/.test(line)) break;
+      section.push(line);
     }
-    const cleaned = line.replace(/^[-•·*]\s*/, '');
-    const match = /^([^：:（(]{1,20})\s*(?:[：:（(]\s*([^）)]*)[）)]?)?\s*(.*)$/.exec(cleaned);
-    if (match?.[1]) {
-      people.push({
-        name: match[1].trim(),
-        description: `${match[2] ?? ''} ${match[3] ?? ''}`.trim(),
-      });
-    }
+    const parsed = parseLines(section);
+    if (parsed.length > 0) return parsed.slice(0, 8);
   }
-  return people.filter((person) => person.name && person.name.length <= 20).slice(0, 6);
+
+  // 没有标题：整段当名单（单独填的一栏就是这种写法）
+  return parseLines(lines).slice(0, 8);
 }
 
 function buildMomentPrompt(character: CharacterPublic, scheduledAt: number): string {  const date = dateKeyOf(scheduledAt);
@@ -382,7 +394,7 @@ async function processSocialJob(job: MomentJobRow, logger: LoggerLike): Promise<
     markMomentJobSkipped(job.id);
     return;
   }
-  const circle = parseSocialCircle(character.persona);
+  const circle = parseSocialCircle(character.socialCircle || character.persona);
   if (circle.length === 0) {
     markMomentJobSkipped(job.id);
     return;
@@ -616,7 +628,7 @@ export function enqueueMomentReply(momentId: string): void {
     scheduledAt: Date.now() + 30_000 + Math.floor(Math.random() * 60_000),
   });
   // 社交圈的人也可能跟着有反应
-  if (parseSocialCircle(character.persona).length > 0) {
+  if (parseSocialCircle(character.socialCircle || character.persona).length > 0) {
     createMomentJob({
       kind: 'social',
       characterId: character.id,

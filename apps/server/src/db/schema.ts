@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS characters (
   provider_id TEXT,
   model TEXT NOT NULL DEFAULT '',
   greeting TEXT NOT NULL DEFAULT '',
+  social_circle TEXT NOT NULL DEFAULT '',
   color TEXT NOT NULL DEFAULT '#b4472f',
   bubble_style TEXT NOT NULL DEFAULT 'soft',
   memory_limit INTEGER NOT NULL DEFAULT 40,

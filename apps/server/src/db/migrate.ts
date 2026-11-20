@@ -19,6 +19,7 @@ export function migrate(db: DatabaseSync): void {
   addColumn(db, 'characters', 'provider_id', 'TEXT');
   addColumn(db, 'characters', 'model', "TEXT NOT NULL DEFAULT ''");
   addColumn(db, 'characters', 'greeting', "TEXT NOT NULL DEFAULT ''");
+  addColumn(db, 'characters', 'social_circle', "TEXT NOT NULL DEFAULT ''");
   addColumn(db, 'characters', 'color', "TEXT NOT NULL DEFAULT '#b4472f'");
   addColumn(db, 'characters', 'bubble_style', "TEXT NOT NULL DEFAULT 'soft'");
   addColumn(db, 'characters', 'memory_limit', 'INTEGER NOT NULL DEFAULT 40');
