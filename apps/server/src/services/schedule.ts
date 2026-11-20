@@ -48,7 +48,7 @@ const planInFlight = new Set<string>();
 const beatInFlight = new Set<string>();
 const promiseInFlight = new Set<string>();
 const followUpInFlight = new Set<string>();
-const FOLLOW_UP_MIN_AGE_MS = 90 * 60 * 1000;
+const FOLLOW_UP_MIN_AGE_MS = 30 * 60 * 1000;
 const PLAN_CHECK_MS = 5 * 60 * 1000;
 const BEAT_CHECK_MS = 30 * 1000;
 
@@ -742,7 +742,7 @@ export function startProactiveScheduler(logger: LoggerLike): () => void {
   const planTimer = setInterval(() => void tickPlans(logger), PLAN_CHECK_MS);
   const beatTimer = setInterval(() => void runDueBeats(logger), BEAT_CHECK_MS);
   const promiseTimer = setInterval(() => void runDuePromises(logger), BEAT_CHECK_MS);
-  const followUpTimer = setInterval(() => void runDueFollowUps(logger), 10 * 60 * 1000);
+  const followUpTimer = setInterval(() => void runDueFollowUps(logger), 5 * 60 * 1000);
   planTimer.unref?.();
   beatTimer.unref?.();
   promiseTimer.unref?.();
