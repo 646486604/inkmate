@@ -60,11 +60,19 @@ Unregister-ScheduledTask -TaskName InkMate -Confirm:$false
 
 ```bash
 pkg update -y && pkg install -y nodejs git
+pkg install -y termux-api                 # 自动开浏览器要它 + F-Droid 的 Termux:API 应用
 node -v                                   # 需 ≥ 22.5，才有内置 node:sqlite
 git clone https://github.com/646486604/inkmate.git ~/inkmate
 cd ~/inkmate && npm install && npm run build
 bash scripts/termux-start.sh              # 后台起服务 + 等就绪 + 直接打开浏览器
 ```
+
+> 想让它**自动拉起浏览器**，需要两样东西同时存在：
+> 1. Termux 里的包 `pkg install termux-api`
+> 2. F-Droid 上的 [Termux:API](https://f-droid.org/packages/com.termux.api/) 应用（装完打开一次并给权限）
+>
+> 缺任何一个，启动器会打印失败原因和修复命令，服务本身照样跑，手动打开
+> `http://127.0.0.1:8787` 即可。随时可以用 `bash scripts/termux-start.sh doctor` 自检。
 
 `scripts/termux-start.sh` 会先确保网易云边车在跑（默认 `127.0.0.1:3000`；第一次会自动安装，约 1–3 分钟），
 再后台拉起 `apps/server/dist/index.js`，轮询 `/api/health` 就绪后用 `termux-open-url` 打开
@@ -86,6 +94,8 @@ VIP 曲目和每日推荐就能用；Cookie 加密保存在手机本地，不需
 | `bash ~/inkmate/scripts/termux-start.sh restart` | 重启并打开浏览器 |
 | `bash ~/inkmate/scripts/termux-start.sh stop` | 停止 |
 | `bash ~/inkmate/scripts/termux-start.sh status` | 看墨伴和边车是否在跑 |
+| `bash ~/inkmate/scripts/termux-start.sh doctor` | 自检：构建产物、服务、termux-api、Termux:API 是否齐 |
+| `bash ~/inkmate/scripts/termux-start.sh open` | 只打开浏览器（服务已在跑时用） |
 | `bash ~/inkmate/scripts/termux-start.sh log` | 跟踪墨伴 `~/inkmate.log`（Ctrl+C 只退出跟踪） |
 | `bash ~/inkmate/scripts/termux-start.sh ncm-log` | 跟踪边车 `~/inkmate-netease.log` |
 | `bash ~/inkmate/scripts/termux-start.sh install` | 只安装/补装边车依赖，不启动 |

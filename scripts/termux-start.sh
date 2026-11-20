@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # InkMate · Termux 启动器（生产模式：单进程托管已构建的 Web）
-# 用法：bash scripts/termux-start.sh [start|open|stop|restart|status|log|ncm-log|install]
+# 用法：bash scripts/termux-start.sh [start|open|stop|restart|status|doctor|log|ncm-log|install]
 # 行为：先确保网易云边车（默认 127.0.0.1:3000）→ 后台拉起 apps/server/dist/index.js
 #       → 轮询 /api/health → 用系统浏览器打开 127.0.0.1:8787
 # 首次 start 会自动安装边车依赖；不想用网易云就设 INKMATE_NO_NETEASE=1。
@@ -128,9 +128,36 @@ start() {
 }
 
 open_url() {
-  termux-open-url "$URL" 2>/dev/null \
-    || /system/bin/am start -a android.intent.action.VIEW -d "$URL" >/dev/null 2>&1 \
-    || echo "→ 请手动打开 $URL"
+  local target="$URL" output=""
+  # 1) 首选 Termux:API（需要 apt 包 termux-api + 应用商店里的 Termux:API 插件，两者缺一不可）
+  if command -v termux-open-url >/dev/null 2>&1; then
+    if output="$(termux-open-url "$target" 2>&1)"; then
+      echo "✓ 已在浏览器打开：$target"
+      return 0
+    fi
+    [ -n "$output" ] && echo "· termux-open-url 失败：$output"
+  else
+    echo "· 没有 termux-open-url（缺少 termux-api 包）"
+  fi
+  # 2) termux-open 也行
+  if command -v termux-open >/dev/null 2>&1; then
+    if output="$(termux-open "$target" 2>&1)"; then
+      echo "✓ 已打开：$target"
+      return 0
+    fi
+    [ -n "$output" ] && echo "· termux-open 失败：$output"
+  fi
+  # 3) 最后试系统 am（部分机型可用）
+  if output="$(/system/bin/am start -a android.intent.action.VIEW -d "$target" 2>&1)"; then
+    echo "✓ 已通过系统 intent 打开：$target"
+    return 0
+  fi
+  echo "✗ 没能自动打开浏览器"
+  echo "  修复办法（Termux 里执行）："
+  echo "    pkg install termux-api"
+  echo "  再去 F-Droid 装上「Termux:API」应用，并在系统设置里给它权限。"
+  echo "  实在不行就手动打开：$target"
+  return 1
 }
 
 stop() {
@@ -150,14 +177,33 @@ status() {
   if ncm_port_open; then echo "✓ 网易云边车运行中：127.0.0.1:$NCM_PORT"; else echo "○ 网易云边车未运行"; fi
 }
 
+doctor() {
+  echo "墨伴自检"
+  echo "- 仓库：$REPO"
+  if [ -f "$ENTRY" ]; then echo "- 构建产物：✓ $ENTRY"; else echo "- 构建产物：✗ 还没有，先 npm run build"; fi
+  if healthy; then echo "- 服务：✓ 运行中 $URL"; else echo "- 服务：○ 未运行（bash $0 start）"; fi
+  if command -v termux-open-url >/dev/null 2>&1; then
+    echo "- termux-api 包：✓ 已装"
+  else
+    echo "- termux-api 包：✗ 未装 → pkg install termux-api"
+  fi
+  if [ -d /data/data/com.termux.api ] 2>/dev/null; then
+    echo "- Termux:API 应用：✓ 已装"
+  else
+    echo "- Termux:API 应用：? 看不到（去 F-Droid 装 Termux:API，否则 termux-open-url 会失败）"
+  fi
+  echo "- 需要时：export INKMATE_NO_OPEN=1 可跳过自动开浏览器"
+}
+
 case "${1:-start}" in
   start)    start && { [ "${INKMATE_NO_OPEN:-}" = "1" ] || open_url; } ;;
   open)     open_url ;;
   stop)     stop ;;
   restart)  stop; sleep 1; start && { [ "${INKMATE_NO_OPEN:-}" = "1" ] || open_url; } ;;
   status)   status ;;
+  doctor)   doctor ;;
   log)      tail -n 50 -f "$LOG" ;;
   ncm-log)  tail -n 50 -f "$NCM_LOG" ;;
   install)  ncm_install ;;
-  *)        echo "用法：bash $0 [start|open|stop|restart|status|log|ncm-log|install]" ;;
+  *)        echo "用法：bash $0 [start|open|stop|restart|status|doctor|log|ncm-log|install]" ;;
 esac
