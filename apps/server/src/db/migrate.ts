@@ -39,8 +39,9 @@ export function migrate(db: DatabaseSync): void {
   addColumn(db, 'chats', 'background', "TEXT NOT NULL DEFAULT ''");
   addColumn(db, 'chats', 'bubble_json', "TEXT NOT NULL DEFAULT ''");
 
-  // 动态绑定到会话
+  // 动态绑定到会话（索引必须等列加完再建，否则老库建索引会报 no such column）
   addColumn(db, 'moments', 'chat_id', "TEXT NOT NULL DEFAULT ''");
+  db.exec('CREATE INDEX IF NOT EXISTS idx_moments_chat ON moments(chat_id, created_at)');
   db.exec(`
     UPDATE moments SET chat_id = (
       SELECT c.id FROM chats c
