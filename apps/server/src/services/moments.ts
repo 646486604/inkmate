@@ -195,6 +195,8 @@ function buildMomentPrompt(character: CharacterPublic, scheduledAt: number): str
     '【你的人设】',
     character.persona.trim() || '自然、真诚。',
     '',
+    character.socialCircle.trim() ? `【你的社交圈】\n${character.socialCircle.trim().slice(0, 600)}` : '',
+    '',
     world ? `【你所在的世界】\n${world}` : '',
     '',
     plan ? `【今天】心情：${plan.mood || '平常'}；${plan.summary || '普通的一天'}` : '',
