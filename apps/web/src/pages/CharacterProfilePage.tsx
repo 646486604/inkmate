@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Heart, Loader2, MessageCircle, Send, Sparkles } from 'lucide-react';
+import { ArrowLeft, Heart, Loader2, MessageCircle, Send, Sparkles, Trash2 } from 'lucide-react';
 import type { CharacterPublic, MomentPublic } from '@inkmate/shared';
 import { api, ApiError } from '../lib/api';
 
@@ -97,6 +97,16 @@ export function CharacterProfilePage() {
       setError(err instanceof ApiError ? err.message : '操作失败');
     } finally {
       setLikeBusyId('');
+    }
+  }
+
+  async function removeMoment(moment: MomentPublic) {
+    if (!window.confirm('删除这条动态？下面的评论和点赞会一起删掉。')) return;
+    try {
+      await api.deleteMoment(moment.id);
+      setMoments((current) => current?.filter((item) => item.id !== moment.id) ?? current);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '删除失败');
     }
   }
 
@@ -244,7 +254,16 @@ export function CharacterProfilePage() {
                     <span className="text-[10px] text-[var(--faint)]">
                       {formatDate(moment.createdAt)}
                     </span>
-                    {moment.mood ? <span className="chip">{moment.mood}</span> : null}
+                    <div className="flex items-center gap-1.5">
+                      {moment.mood ? <span className="chip">{moment.mood}</span> : null}
+                      <button
+                        className="rounded-lg px-1 py-0.5 text-[var(--faint)] hover:text-[var(--accent)]"
+                        onClick={() => void removeMoment(moment)}
+                        aria-label="删除这条动态"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
                   </div>
                   <p className="mt-2 whitespace-pre-wrap text-[12px] leading-relaxed">
                     {moment.content}

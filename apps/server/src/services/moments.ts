@@ -122,7 +122,16 @@ export interface SocialPerson {
   description: string;
 }
 
-/** 读社交圈：优先用角色卡里单独填的那一栏，没填再从人设里找「社交圈」段落 */
+/** 给互动用的原始材料：优先单独填的那栏（什么格式都行），没填再从人设里抽出名单 */
+export function socialMaterial(character: CharacterPublic): string {
+  const direct = character.socialCircle.trim();
+  if (direct) return direct.slice(0, 4000);
+  const people = parseSocialCircle(character.persona);
+  if (people.length === 0) return '';
+  return people.map((person) => `${person.name}：${person.description}`).join('\n');
+}
+
+/** 从人设里读出「社交圈 / 人际关系」这一段，作为兜底 */
 export function parseSocialCircle(text: string): SocialPerson[] {
   const content = text.trim();
   if (!content) return [];
@@ -394,8 +403,8 @@ async function processSocialJob(job: MomentJobRow, logger: LoggerLike): Promise<
     markMomentJobSkipped(job.id);
     return;
   }
-  const circle = parseSocialCircle(character.socialCircle || character.persona);
-  if (circle.length === 0) {
+  const material = socialMaterial(character);
+  if (!material) {
     markMomentJobSkipped(job.id);
     return;
   }
@@ -430,12 +439,13 @@ async function processSocialJob(job: MomentJobRow, logger: LoggerLike): Promise<
             `「${character.name}」发了一条动态。`,
             `动态内容：${moment.content}`,
             '',
-            '【社交圈】',
-            ...circle.map((person) => `- ${person.name}：${person.description || '朋友'}`),
+            '【朋友材料】（格式随意，可能是 YAML/列表/散文，你自己读）',
+            material,
             '',
             lastUserComment ? `用户评论：${lastUserComment.content}` : '用户刚点了赞。',
             '',
-            '从中选 1–2 个人来互动：可以只点赞，也可以留一句话。语气符合他们和主角的关系，20 字以内，不要提 AI。',
+            '从材料里找出 1–2 个可能来互动的朋友：可以只点赞，也可以留一句话。',
+            '名字照材料里写的那样输出（中文名原样），语气符合材料里写的关系，20 字以内，不要提 AI。',
             '不要选主角本人。',
             '只输出 JSON：{"likes":["名字"],"comments":[{"name":"名字","content":"..."}]}',
           ].join('\n'),
@@ -454,9 +464,12 @@ async function processSocialJob(job: MomentJobRow, logger: LoggerLike): Promise<
       likes?: unknown;
       comments?: unknown;
     };
-    const known = new Set(circle.map((person) => person.name));
+    const selfNames = new Set([character.name.trim(), character.nickname.trim()].filter(Boolean));
+    const acceptName = (name: string) => Boolean(name) && name.length <= 20 && !selfNames.has(name);
     const likes = Array.isArray(parsed.likes)
-      ? parsed.likes.map((item) => String(item).trim()).filter((name) => known.has(name))
+      ? parsed.likes
+          .map((item) => String(item).trim())
+          .filter((name) => acceptName(name))
       : [];
     const comments = Array.isArray(parsed.comments)
       ? (parsed.comments as Array<{ name?: unknown; content?: unknown }>)
@@ -464,7 +477,7 @@ async function processSocialJob(job: MomentJobRow, logger: LoggerLike): Promise<
             name: String(item?.name ?? '').trim(),
             content: String(item?.content ?? '').trim(),
           }))
-          .filter((item) => known.has(item.name) && item.content)
+          .filter((item) => acceptName(item.name) && item.content)
           .slice(0, 2)
       : [];
 
@@ -628,7 +641,7 @@ export function enqueueMomentReply(momentId: string): void {
     scheduledAt: Date.now() + 30_000 + Math.floor(Math.random() * 60_000),
   });
   // 社交圈的人也可能跟着有反应
-  if (parseSocialCircle(character.socialCircle || character.persona).length > 0) {
+  if (socialMaterial(character)) {
     createMomentJob({
       kind: 'social',
       characterId: character.id,

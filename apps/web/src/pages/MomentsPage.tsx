@@ -311,7 +311,6 @@ export function MomentsPage() {
         <div className="space-y-4">
           {moments.map((moment) => {
             const draft = commentDrafts[moment.id] ?? '';
-            const isMine = moment.authorType === 'user';
             return (
               <article key={moment.id} className="card p-4">
                 <div className="flex items-start gap-3">
@@ -337,14 +336,13 @@ export function MomentsPage() {
                       <span className="chip mt-2 inline-flex">{moment.mood}</span>
                     ) : null}
                   </div>
-                  {isMine ? (
-                    <button
-                      className="btn btn-quiet h-6 min-h-6 px-1 text-[var(--faint)] hover:text-[var(--accent)]"
-                      onClick={() => void removeMoment(moment)}
-                    >
-                      <Trash2 size={12} />
-                    </button>
-                  ) : null}
+                  <button
+                    className="btn btn-quiet h-6 min-h-6 px-1 text-[var(--faint)] hover:text-[var(--accent)]"
+                    onClick={() => void removeMoment(moment)}
+                    aria-label="删除这条动态"
+                  >
+                    <Trash2 size={12} />
+                  </button>
                 </div>
 
                 {moment.images.length > 0 ? (

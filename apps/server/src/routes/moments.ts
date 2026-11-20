@@ -57,9 +57,6 @@ const momentRoutes: FastifyPluginAsync = async (app) => {
     const { id } = req.params as { id: string };
     const moment = getMomentRow(id);
     if (!moment) throw new HttpError(404, '动态不存在');
-    if (moment.author_type !== 'user' || moment.author_id !== req.user!.id) {
-      throw new HttpError(403, '只能删除自己的动态');
-    }
     deleteMoment(id);
     return reply.code(204).send();
   });

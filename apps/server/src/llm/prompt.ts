@@ -131,7 +131,7 @@ export function buildChatMessages(options: {
   } = options;
   const nickname = character.nickname.trim() || character.name;
   const persona = character.persona.trim() || '自然、真诚，有自己的生活和情绪。';
-  const socialCircle = character.socialCircle.trim().slice(0, 800);
+  const socialCircle = character.socialCircle.trim().slice(0, 2500);
   const userName = identity?.name.trim() || user.displayName.trim() || '我';
   const userPersona = identity?.persona.trim() || user.persona.trim();
   const stickerText = stickers
@@ -418,7 +418,7 @@ export function buildProactiveMessages(options: {
     `【你的设定】\n${character.persona.trim() || '自然、真诚，有自己的生活和情绪。'}`,
     '',
     character.socialCircle.trim()
-      ? `【你的社交圈】\n${character.socialCircle.trim().slice(0, 800)}`
+      ? `【你的社交圈】\n${character.socialCircle.trim().slice(0, 2500)}`
       : '',
     '',
     user.persona.trim() ? `【对方的人设】\n${user.persona.trim()}` : '',
