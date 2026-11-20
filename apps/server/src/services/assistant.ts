@@ -19,6 +19,7 @@ import {
 import { getMemory } from '../db/memory.js';
 import { createPromise, listUpcomingPromises } from '../db/promises.js';
 import { addAgendaItem, listAgenda } from '../db/agenda.js';
+import { setOpenQuestion } from '../db/questions.js';
 import { getWorldEntriesForCharacter, type InjectedWorldEntry } from '../db/world-books.js';
 import { HttpError } from '../lib/http-error.js';
 import { buildChatMessages, buildGroupMessages } from '../llm/prompt.js';
@@ -420,6 +421,18 @@ export async function streamAssistantReply(options: {
     }
 
     touchChat(chatId, 1);
+    // 记下最后一句问话：如果对方一直不回，过一阵可以自然地追问
+    const textContent = savedMessages
+      .filter((message) => message.kind === 'text')
+      .map((message) => message.content)
+      .join('\n');
+    const questionLine = textContent
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .reverse()
+      .find((line) => /[?？]/.test(line));
+    if (questionLine) setOpenQuestion(chatId, character.id, questionLine);
     // 新回复已经存好，这时才真正替换掉旧的那条
     if (replaceMessageId && savedMessages.length > 0) hardDeleteMessage(replaceMessageId);
     event(reply, 'done', { message: saved, messages: savedMessages });

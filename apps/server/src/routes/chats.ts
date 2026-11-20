@@ -36,6 +36,7 @@ import {
   upsertSummary,
 } from '../db/memory.js';
 import { refreshMemory } from '../services/memory.js';
+import { clearOpenQuestions } from '../db/questions.js';
 
 const chatRoutes: FastifyPluginAsync = async (app) => {
   app.addHook('preHandler', requireAuth);
@@ -155,6 +156,7 @@ const chatRoutes: FastifyPluginAsync = async (app) => {
       meta: Object.keys(meta).length > 0 ? meta : undefined,
     });
     touchChat(id, 0);
+    clearOpenQuestions(id);
     markChatRead(id);
 
     await streamAssistantReply({
@@ -211,6 +213,7 @@ const chatRoutes: FastifyPluginAsync = async (app) => {
       });
     });
     touchChat(id, 0);
+    clearOpenQuestions(id);
     markChatRead(id);
 
     await streamAssistantReply({

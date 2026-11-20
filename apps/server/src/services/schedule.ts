@@ -2,6 +2,7 @@ import type { CharacterPublic, DayBeatPublic, DayPlanPublic, MessagePublic } fro
 import { getCharacter, listCharacters } from '../db/characters.js';
 import {
   createChatForCharacter,
+  getChatRow,
   getLastMessage,
   getPrivateChatForCharacter,
   getRecentMessages,
@@ -32,6 +33,7 @@ import { buildProactiveMessages } from '../llm/prompt.js';
 import { resolveProviderForCharacter } from '../llm/resolve.js';
 import { maybeSummarize } from './memory.js';
 import { listDuePromises, markPromise } from '../db/promises.js';
+import { listQuestionsToFollowUp, markFollowedUp } from '../db/questions.js';
 import { publish } from './events.js';
 import { sendPushToAll } from './push.js';
 import { getWeatherText } from './weather.js';
@@ -45,6 +47,8 @@ interface LoggerLike {
 const planInFlight = new Set<string>();
 const beatInFlight = new Set<string>();
 const promiseInFlight = new Set<string>();
+const followUpInFlight = new Set<string>();
+const FOLLOW_UP_MIN_AGE_MS = 90 * 60 * 1000;
 const PLAN_CHECK_MS = 5 * 60 * 1000;
 const BEAT_CHECK_MS = 30 * 1000;
 
@@ -666,21 +670,93 @@ export async function runDuePromises(logger: LoggerLike): Promise<void> {
   }
 }
 
+/** 角色问过、对方一直没回：过一阵自然地追问一次（不重复原问题） */
+export async function runDueFollowUps(logger: LoggerLike): Promise<void> {
+  const due = listQuestionsToFollowUp(FOLLOW_UP_MIN_AGE_MS);
+  if (due.length === 0) return;
+  for (const item of due) {
+    if (followUpInFlight.has(item.id)) continue;
+    followUpInFlight.add(item.id);
+    try {
+      const character = getCharacter(item.character_id);
+      const chat = getChatRow(item.chat_id);
+      if (!character || !chat) {
+        markFollowedUp(item.id);
+        continue;
+      }
+      const now = new Date();
+      if (
+        !character.initiative.testMode &&
+        isQuiet(now, character.initiative.quietStart, character.initiative.quietEnd)
+      ) {
+        continue;
+      }
+      const last = getLastMessage(item.chat_id);
+      if (last && last.role === 'user') {
+        markFollowedUp(item.id);
+        continue;
+      }
+      const date = dateKeyOf(now);
+      const plan = getPlan(character.id, date);
+      const beat: DueBeat = {
+        id: `followup-${item.id}`,
+        plan_id: plan?.id ?? '',
+        start_at: Date.now(),
+        end_at: Date.now() + 30 * 60_000,
+        due_at: Date.now(),
+        activity: currentBeat(character.id, date, Date.now())?.activity ?? '此刻',
+        location: '',
+        energy: 'normal',
+        contact_worthy: 1,
+        contact_intent: `你之前问过对方「${item.question}」，一直没回；可以自然地再提一句，或者换个角度关心一下。不要机械重复原问题，也不要质问。`,
+        tone: '自然',
+        status: 'pending',
+        message_id: null,
+        attempts: 0,
+        created_at: Date.now(),
+        character_id: character.id,
+        plan_date: date,
+        mood: plan?.mood ?? '',
+        summary: plan?.summary ?? '',
+      };
+      const message = await processBeat(beat, logger, { force: true });
+      markFollowedUp(item.id);
+      if (message) {
+        logger.info(
+          { characterId: character.id, chatId: item.chat_id, questionId: item.id },
+          '[followup] sent',
+        );
+      }
+    } catch (error) {
+      logger.warn(
+        { err: error instanceof Error ? error.message : String(error), questionId: item.id },
+        '[followup] failed',
+      );
+    } finally {
+      followUpInFlight.delete(item.id);
+    }
+  }
+}
+
 export function startProactiveScheduler(logger: LoggerLike): () => void {
   const planTimer = setInterval(() => void tickPlans(logger), PLAN_CHECK_MS);
   const beatTimer = setInterval(() => void runDueBeats(logger), BEAT_CHECK_MS);
   const promiseTimer = setInterval(() => void runDuePromises(logger), BEAT_CHECK_MS);
+  const followUpTimer = setInterval(() => void runDueFollowUps(logger), 10 * 60 * 1000);
   planTimer.unref?.();
   beatTimer.unref?.();
   promiseTimer.unref?.();
+  followUpTimer.unref?.();
   setTimeout(() => {
     void tickPlans(logger);
     void runDueBeats(logger);
     void runDuePromises(logger);
+    void runDueFollowUps(logger);
   }, 2_000).unref?.();
   return () => {
     clearInterval(planTimer);
     clearInterval(beatTimer);
     clearInterval(promiseTimer);
+    clearInterval(followUpTimer);
   };
 }

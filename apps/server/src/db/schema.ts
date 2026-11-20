@@ -108,6 +108,19 @@ CREATE TABLE IF NOT EXISTS character_agenda (
 );
 CREATE INDEX IF NOT EXISTS idx_agenda_character_date ON character_agenda(character_id, date);
 
+-- 角色问过、但用户还没回的问题；过一阵可以自然地追问
+CREATE TABLE IF NOT EXISTS chat_open_questions (
+  id TEXT PRIMARY KEY,
+  chat_id TEXT NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+  character_id TEXT NOT NULL,
+  question TEXT NOT NULL,
+  asked_at INTEGER NOT NULL,
+  followed_at INTEGER,
+  status TEXT NOT NULL DEFAULT 'open',
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_questions_open ON chat_open_questions(chat_id, status, asked_at);
+
 CREATE TABLE IF NOT EXISTS world_books (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
